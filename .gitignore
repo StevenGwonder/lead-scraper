@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+local-biz-cache.json
+*.json
+.env
