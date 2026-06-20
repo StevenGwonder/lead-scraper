@@ -1138,17 +1138,17 @@ def lead_score_badge(tier, score):
         return f'<span class="badge badge-cold">{score}/100</span>'
 
 
-def generate_html_report(cache, zip_code="92562"):
+def generate_html_report(cache, zip_code="92562", prev_run=None):
     """Phase 4: HTML report organized by lead qualification score, not website score.
-    Hot leads at top, sorted by score. Shows why each lead is qualified."""
+    prev_run: the last_run value BEFORE this run started, used for NEW badges (T7)."""
     businesses = cache.get("businesses", {})
     signals = cache.get("signals", [])
     fb_groups = cache.get("fb_groups", [])
     now = datetime.now(timezone.utc)
     today = now.strftime("%a %b %d, %Y")
     total_runs = cache.get("runs", 0)
-    last_run_iso = cache.get("last_run")
-    new_cutoff = last_run_iso or (now - timedelta(hours=24)).isoformat()
+    # T7: use prev_run (captured before cache["last_run"] was overwritten) so NEW badges work
+    new_cutoff = prev_run or (now - timedelta(hours=24)).isoformat()
 
     # Ensure every business has a lead_score
     for biz in businesses.values():
@@ -1366,9 +1366,9 @@ def generate_html_report(cache, zip_code="92562"):
 </body></html>"""
 
 
-def send_report(cache, zip_code, now):
+def send_report(cache, zip_code, now, prev_run=None):
     """Generate HTML report, write to file, send to Telegram. ponytail: extracted from 2 duplicate blocks."""
-    html = generate_html_report(cache, zip_code)
+    html = generate_html_report(cache, zip_code, prev_run=prev_run)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"scout-report-{now.strftime('%Y%m%d_%H%M')}.html"
     with open(report_path, "w") as f:
@@ -1396,11 +1396,13 @@ def main():
 
     cache = load_cache()
     now = datetime.now(timezone.utc)
+    # T7: capture before any crawl so the report can mark truly-new businesses
+    prev_run = cache.get("last_run")
 
     # ── BRIEFING-ONLY MODE ──
     if args.briefing:
         if args.html:
-            send_report(cache, args.zip, now)
+            send_report(cache, args.zip, now, prev_run=prev_run)
         sys.exit(0)
 
     # ── PICK NEXT QUERY GROUP ──
@@ -1613,7 +1615,7 @@ def main():
 
     # ── OUTPUT ──
     if args.html:
-        send_report(cache, args.zip, now)
+        send_report(cache, args.zip, now, prev_run=prev_run)
     sys.exit(0)
 
 
