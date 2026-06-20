@@ -325,7 +325,7 @@ def extract_phones(text):
         if len(digits) == 11 and digits.startswith('1'):
             digits = digits[1:]
         if digits not in seen and len(digits) == 10:
-            # Skip area codes that are clearly not real (000, 800, 888 toll-free often junk)
+            # Skip area codes that are clearly not real (000 = invalid, 999 = test)
             if not digits.startswith(('000', '999')):
                 seen.add(digits)
                 # Normalize format: (XXX) XXX-XXXX
@@ -650,9 +650,11 @@ def check_website(domain):
 
 
 def search_hiring_signals(biz_name, cache_key, cache):
-    """T6: Role-aware hiring search. Only flags when a real hiring verb + biz name
+    """T6+T10: Role-aware hiring search. Only flags when a real hiring verb + biz name
     appear together; sets hiring_role_match=True for AUTOMATABLE_ROLES matches.
-    A bare 'jobs'/'hiring' echo of the query is not sufficient on its own."""
+    T10: indeed/ziprecruiter/linkedin job URLs are intentionally allowed here (they're
+    blocked in the crawl loop as 'not real businesses', but they're authoritative signal
+    sources for whether a named business is hiring an automatable role)."""
     if not biz_name or len(biz_name) < 3:
         return False
     cached = cache.get("businesses", {}).get(cache_key, {})
@@ -743,11 +745,18 @@ def search_review_signals(biz_name, cache_key, cache):
     return negative_found
 
 
+def corroborated(review_signals):
+    """T18: PRD §2b rule 7 — soft signal counts only when seen in ≥2 independent
+    sources or from a structured source. Tier-1 job postings are exempt (caller decides)."""
+    return sum(1 for r in review_signals if r.get("complaints")) >= 2
+
+
 def qualify_lead(biz, sq):
     """5-pillar buying-readiness score (0-100). See PRD.md §2 for the model.
     T13 confidence gate: site-derived points require status==up+confidence==high.
     T4 contactability gate: no phone AND no email → tier capped at Cold.
-    T5 tier rules: Hot requires contactable + strong qualifier + total ≥ 65."""
+    T5 tier rules: Hot requires contactable + strong qualifier + total ≥ 65.
+    T18 corroboration: review complaints require ≥2 review results with complaints."""
     if not sq:
         return {"score": 0, "tier": "Cold", "breakdown": {}, "reasons": ["not yet analyzed"]}
 
@@ -759,7 +768,7 @@ def qualify_lead(biz, sq):
     GB = SCORING["growth_budget"]
     DF = SCORING["digital_footing"]
 
-    gaps = sq.get("automation_gaps", sq.get("issues", []))
+    gaps = sq.get("automation_gaps", [])
     status = sq.get("status", "unknown")
     # T13: only award site-derived points when we actually read the site
     verified = status == "up" and sq.get("confidence") == "high"
@@ -781,10 +790,14 @@ def qualify_lead(biz, sq):
     breakdown["repetitive_work"] = min(rw, RW["max"])
 
     # ── NAMED PAIN (external signal — exempt from verified gate) ──
+    # T18: require corroboration — complaint in ≥2 independent review results (PRD §2b rule 7)
     np_score = 0
-    if biz.get("review_negative"):
+    review_signals = biz.get("review_signals", [])
+    if biz.get("review_negative") and corroborated(review_signals):
         np_score += NP["review_complaint"]
         reasons.append(f"customers report slow/no response — our exact pitch (+{NP['review_complaint']})")
+    elif biz.get("review_negative"):
+        reasons.append("single complaint mention — needs corroboration to score")
     breakdown["named_pain"] = min(np_score, NP["max"])
 
     # ── GROWTH & BUDGET (T5) ──
@@ -851,7 +864,7 @@ def qualify_lead(biz, sq):
     # ── TIER RULES (T5) ──
     # Hot: contactable AND (named pain OR automatable-role hiring OR verified admin/ops) AND ≥65
     hot_qualifier = (
-        biz.get("review_negative")
+        (biz.get("review_negative") and corroborated(review_signals))
         or hiring_role_match
         or (trade in ADMIN_TRADES and verified)
     )
@@ -1512,7 +1525,9 @@ def main():
                         if domain in eb.get("own_domains", []):
                             existing_norm = en
                             break
-                norm = existing_norm or re.sub(r'[^a-z0-9]', '', name.lower())[:25]
+                # T11: no-domain businesses get a hash suffix so distinct firms with similar names don't collide
+                norm = existing_norm or (re.sub(r'[^a-z0-9]', '', name.lower())[:20]
+                                         + ("" if is_own_site else f"-{abs(hash(name)) % 1000}"))
 
                 if norm in cache["businesses"]:
                     b = cache["businesses"][norm]

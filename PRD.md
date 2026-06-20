@@ -180,7 +180,8 @@ tiers as before this change.
 
 ---
 
-### - [ ] T2 — Cap the down/blocked-site bonus (fixes F1)
+### - [x] T2 — Cap the down/blocked-site bonus (fixes F1)
+> Done: SCORING restructured to 5-pillar model; digital_footing["site_down"]=3, ["site_blocked"]=5. Down-only → Unverified, score ≤ 3.
 **Prompt:** In `qualify_lead`, change the status handling so a **down** site adds
 at most `SCORING["digital_footing"]["site_down"]` = **3** (not 25), and a
 **blocked** site adds **5**. Remove the `+25` automation award for down sites and
@@ -191,7 +192,8 @@ reviews/hiring scores ≤ 10 total and lands in Cold or Unverified, never Hot.
 
 ---
 
-### - [ ] T3 — Replace tooling-gap scoring with ICP pillars (fixes F2)
+### - [x] T3 — Replace tooling-gap scoring with ICP pillars (fixes F2)
+> Done: repetitive_work pillar (max 35): admin_ops +25, appointment+no-booking +10. analytics/marketing scoring removed.
 **Prompt:** Rewrite the automation-readiness section of `qualify_lead` into the
 **Repetitive-work load** pillar (max 35): admin/ops trade (`trade in ADMIN_TRADES`)
 → +25; an appointment-heavy trade (`HVAC`, `Plumbing`, `Auto Repair`, `Carpet
@@ -204,7 +206,8 @@ admin/ops business with a working site scores ≥ 25 on this pillar.
 
 ---
 
-### - [ ] T4 — Make contactability a gate, not a bonus (fixes F9)
+### - [x] T4 — Make contactability a gate, not a bonus (fixes F9)
+> Done: no phone AND no email → tier capped at Cold regardless of score.
 **Prompt:** In `qualify_lead`, after computing the total, enforce: if the business
 has **no phone and no email** (`biz.get("phones")` empty and
 `biz.get("emails")`/`sq.get("emails")` empty), cap its tier at **Cold**
@@ -215,7 +218,8 @@ the numeric score for reference but never assign Hot/Warm without a phone or ema
 
 ---
 
-### - [ ] T5 — Add the Named-pain and Growth pillars with new tier rules (fixes F4)
+### - [x] T5 — Add the Named-pain and Growth pillars with new tier rules (fixes F4)
+> Done: named_pain(25) + growth_budget(25) pillars; Hot requires contactable + (complaint OR role-hiring OR verified admin/ops) + ≥65.
 **Prompt:** Rewrite the growth/review section of `qualify_lead` into two pillars
 reading from `SCORING`:
 - **Named pain (max 25):** `biz.get("review_negative")` → +25 (this is the lead
@@ -234,7 +238,8 @@ a responsiveness complaint and a phone reaches Hot.
 
 ---
 
-### - [ ] T6 — Make hiring detection role-aware (fixes F3)
+### - [x] T6 — Make hiring detection role-aware (fixes F3)
+> Done: AUTOMATABLE_ROLES + HIRING_VERBS constants; name+verb required; hiring_role_match flag set on role match.
 **Prompt:** In `search_hiring_signals` (~line 432), add a module-level list
 `AUTOMATABLE_ROLES = ["receptionist", "front desk", "scheduler", "scheduling",
 "intake", "dispatcher", "dispatch", "administrative assistant", "admin assistant",
@@ -254,7 +259,8 @@ no longer flagged; a posting for "scheduler" or "receptionist" sets
 
 ---
 
-### - [ ] T7 — Fix the always-zero "New" count (fixes F5)
+### - [x] T7 — Fix the always-zero "New" count (fixes F5)
+> Done: prev_run captured before crawl; passed through send_report → generate_html_report as new_cutoff.
 **Prompt:** In `main()` (~line 1126), capture the **previous** last-run value
 before overwriting it: `prev_run = cache.get("last_run")` near the top of
 `main()`, before the crawl. Pass it into `generate_html_report` (add a
@@ -266,7 +272,8 @@ NEW badges are > 0 for the just-added businesses.
 
 ---
 
-### - [ ] T8 — Qualification-aware cache TTL (fixes F6, F7)
+### - [x] T8 — Qualification-aware cache TTL (fixes F6, F7)
+> Done: Hot/Warm 30d, Cold 7d; signals/fb_groups pruned >14d.
 **Prompt:** In `load_cache` (~line 669), replace the flat 7-day expiry with
 tier-aware TTL: keep Hot/Warm leads for 30 days, Cold for 7 days, based on
 `v.get("lead_score", {}).get("tier")` and `v.get("last_seen")`. Also prune
@@ -278,7 +285,8 @@ gone.
 
 ---
 
-### - [ ] T9 — Add the Unverified bucket + pitch lines to the report (narrative; F1, F11)
+### - [x] T9 — Add the Unverified bucket + pitch lines to the report (narrative; F1, F11)
+> Done: Unverified section added (collapsed); pitch_for() helper; "Pitch this:" line on every Hot/Warm card; scoring reasons moved to collapsible details.
 **Prompt:** In `generate_html_report` (~line 886) and `render_lead_card`
 (~line 939): (a) route businesses with `status in ("down","blocked")` and no
 phone/email/reviews/hiring into a new collapsed **"🛰️ Unverified — couldn't
@@ -295,7 +303,8 @@ Warm card shows a plain-English "Pitch this:" line.
 
 ---
 
-### - [ ] T10 — Stop discarding job-board role signals (F10)
+### - [x] T10 — Stop discarding job-board role signals (F10)
+> Done: job boards allowed in hiring signal search (intentional exception documented); still blocked in crawl loop.
 **Prompt:** This is the one philosophy-expanding task — keep it conservative.
 Do **not** remove job boards from `AGGREGATOR_DOMAINS` (they're still bad
 *business* results). Instead, in `search_hiring_signals`, allow results from
@@ -309,7 +318,8 @@ in the crawl loop.
 
 ---
 
-### - [ ] T11 — Cleanup: dead code + comment drift (F8, F12)
+### - [x] T11 — Cleanup: dead code + comment drift (F8, F12)
+> Done: removed issues fallback; fixed phone comment; no-domain dedup key now gets hash suffix.
 **Prompt:** (a) Remove the legacy `sq.get("automation_gaps", sq.get("issues", []))`
 fallback (~536) — use `sq.get("automation_gaps", [])`. (b) Fix the `extract_phones`
 comment (~277) to match behavior (it skips 000/999, not toll-free), OR if you and
@@ -322,7 +332,8 @@ get distinct cache keys.
 
 ---
 
-### - [ ] T12 — Update README + sync the scoring table doc
+### - [x] T12 — Update README + sync the scoring table doc
+> Done: README rewritten around 5-pillar model; Website Quality framing removed as headline metric.
 **Prompt:** Update `README.md` to describe the new 5-pillar buying-readiness model
 and the Unverified bucket, and remove the stale "Website Quality Score (0–5)"
 framing as the headline metric (keep it as a sub-input). Reference `PRD.md` §2 as
@@ -430,7 +441,8 @@ UA×scheme attempts are exhausted.
 **Acceptance:** A React/Next shell reports `status="unknown"`, not "thin content";
 a site that 403s the first UA but serves a later one is read successfully.
 
-### - [ ] T18 — Corroboration gate for soft signals (supports F3, reliability)
+### - [x] T18 — Corroboration gate for soft signals (supports F3, reliability)
+> Done: corroborated() helper checks ≥2 review results with complaints; named_pain + hot_qualifier both gated on it.
 **Prompt:** Add a small helper `corroborated(observations)` that returns True only
 when a soft signal (manual-process tells, generic negative reviews) is supported by
 ≥2 independent sources (e.g., complaint seen in 2+ review results) OR comes from a
