@@ -358,7 +358,14 @@ reason "site unverified — scored on external signals only" when applicable.
 **Acceptance:** A business with `status in ("down","blocked")` and no external
 signal scores 0 and lands in Unverified; the `confidence` field now affects output.
 
-### - [ ] T14 — Distinguish "unreachable" from "down"; stop confident mislabeling (fixes F14, F15)
+### - [x] T14 — Distinguish "unreachable" from "down"; stop confident mislabeling (fixes F14, F15)
+> Done: timeout/TLS/generic and 4xx/5xx now return `("unknown","low")` instead of
+> `("down","high")`/`("blocked",…)`. `"down"` is reserved for a connected-but-dead
+> page. Report shows a `● UNVERIFIED` badge (no more `UP -1/5`); the signal loop
+> now includes `unknown` leads so they can still earn external signals. Verified:
+> an unreachable domain → `unknown/low`, scores 0/Cold.
+
+
 **Prompt:** In `check_website` (~line 345), change the failure paths so a timeout,
 TLS error, or generic exception returns `_base_result("unknown", "low",
 ["unreachable — couldn't connect"])` — NOT `("down","high")`. Reserve

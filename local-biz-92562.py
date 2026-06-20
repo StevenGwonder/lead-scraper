@@ -471,10 +471,15 @@ def check_website(domain):
                     return _base_result("blocked", "low", ["bot-protected — can't verify"])
                 if e.code == 404:
                     continue
-                return _base_result("blocked", "low", [f"HTTP {e.code} — can't verify"])
+                # T14: a 4xx/5xx (often the server rejecting *our* request) is not
+                # evidence about the business — it's UNKNOWN, not opportunity.
+                return _base_result("unknown", "low", [f"HTTP {e.code} — can't verify"])
             except (urllib.error.URLError, Exception):
                 continue
-    return _base_result("down", "high", ["site down"])
+    # T14: we exhausted every scheme/UA without connecting. We did NOT observe a
+    # dead site — we failed to reach it. Report UNKNOWN/low, never "down"/high.
+    # ("down" is reserved for a page we connected to that is genuinely dead/parked.)
+    return _base_result("unknown", "low", ["unreachable — couldn't connect"])
 
 
 def search_hiring_signals(biz_name, cache_key, cache):
@@ -1019,8 +1024,11 @@ def generate_html_report(cache, zip_code="92562"):
             html += '<span class="lead-status status-down">● DOWN</span>'
         elif status == "blocked":
             html += '<span class="lead-status status-blocked">● BLOCKED</span>'
-        else:
+        elif status == "up":
             html += f'<span class="lead-status status-up">● UP {ws}/5</span>'
+        else:
+            # T14: unknown / unreachable — couldn't read, so don't claim "UP -1/5"
+            html += '<span class="lead-status status-blocked">● UNVERIFIED</span>'
         html += '</div>'
 
         # Qualification reasons (why this lead is qualified)
@@ -1287,7 +1295,9 @@ def main():
     scored_leads = []
     for norm, biz in cache["businesses"].items():
         sq = biz.get("site_quality")
-        if not sq or sq.get("status") not in ("up", "blocked", "down"):
+        # T14: include "unknown" (unreachable) — those leads can ONLY be scored on
+        # external signals, so they need the hiring/review search the most.
+        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
             continue
         if biz.get("hiring_checked") and biz.get("review_checked"):
             continue  # Already checked both
