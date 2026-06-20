@@ -97,6 +97,21 @@ TRADE_GROUPS = [
 ADMIN_TRADES = {"Accounting", "Law Office", "Insurance", "Property Management",
                 "Recruiting", "Consulting"}
 
+# T6: Roles where hiring = "you're about to pay a human to do agent work"
+AUTOMATABLE_ROLES = [
+    "receptionist", "front desk", "scheduler", "scheduling", "intake",
+    "dispatcher", "dispatch", "administrative assistant", "admin assistant",
+    "data entry", "office assistant", "customer service rep",
+    "appointment coordinator", "office manager", "billing coordinator",
+    "accounts receivable", "accounts payable", "bookkeeper",
+]
+# T6: Hiring verbs that prove the page is an actual job posting, not a query echo
+HIRING_VERBS = [
+    "now hiring", "we're hiring", "we are hiring", "join our team",
+    "apply now", "apply today", "open position", "job opening",
+    "career opportunity", "careers at", "work with us",
+]
+
 # Platform detection — ponytail: dict loop replaces 6 inline ifs
 PLATFORMS = {
     "wp-content": "WordPress", "wordpress": "WordPress",
@@ -635,46 +650,55 @@ def check_website(domain):
 
 
 def search_hiring_signals(biz_name, cache_key, cache):
-    """Phase 2: Search SearXNG for hiring signals — '{name} hiring' and '{name} jobs'.
-    Returns True if hiring signals found. Stores results in cache['businesses'][cache_key]['hiring_signals'].
-    Respects 6-second rate limiting between queries."""
+    """T6: Role-aware hiring search. Only flags when a real hiring verb + biz name
+    appear together; sets hiring_role_match=True for AUTOMATABLE_ROLES matches.
+    A bare 'jobs'/'hiring' echo of the query is not sufficient on its own."""
     if not biz_name or len(biz_name) < 3:
         return False
-    # Check cache first — don't re-search within 3 days
     cached = cache.get("businesses", {}).get(cache_key, {})
     if cached.get("hiring_checked"):
-        cached_hiring = cached.get("hiring_signals", [])
-        return bool(cached_hiring)
-    
+        return bool(cached.get("hiring_signals", []))
+
+    biz_name_lower = biz_name.lower()
+    # Short words (≤4 chars) match too broadly in URL/title fragments — skip name check for them
+    name_words = [w for w in biz_name_lower.split() if len(w) > 4]
+
     hiring_found = False
+    role_match = False
     hiring_results = []
+
     for q in [f"{biz_name} hiring", f"{biz_name} jobs"]:
         results = searx_search(q, limit=6, delay=6)
         for r in results:
             title = (r.get("title", "") or "").lower()
             snippet = (r.get("content", "") or "").lower()
+            url = (r.get("url", "") or "").lower()
             combined = title + " " + snippet
-            # Look for actual hiring indicators (job listings, "we're hiring", "now hiring", career pages)
-            if any(kw in combined for kw in [
-                "hiring", "jobs", "careers", "employment", "job opening",
-                "now hiring", "we're hiring", "job posting", "apply now",
-                "join our team", "career opportunity",
-            ]):
-                hiring_found = True
-                hiring_results.append({
-                    "title": r.get("title", "")[:70],
-                    "snippet": (r.get("content", "") or "")[:120],
-                    "url": r.get("url", ""),
-                })
+
+            # T6: require a real hiring verb, not just the echoed query keyword
+            has_verb = any(v in combined for v in HIRING_VERBS)
+            # T6: require biz name in title or URL to avoid unrelated aggregator pages
+            name_present = any(w in title or w in url for w in name_words) if name_words else (biz_name_lower[:6] in title or biz_name_lower[:6] in url)
+            if not (has_verb and name_present):
+                continue
+
+            hiring_found = True
+            # T6: flag automatable role if mentioned
+            if any(role in combined for role in AUTOMATABLE_ROLES):
+                role_match = True
+            hiring_results.append({
+                "title": r.get("title", "")[:70],
+                "snippet": (r.get("content", "") or "")[:120],
+                "url": r.get("url", ""),
+            })
         if hiring_found:
-            break  # Don't do second query if first found results
+            break
         time.sleep(6)
-    
-    # Store in cache
-    if cache_key not in cache.get("businesses", {}):
-        cache["businesses"][cache_key] = {}
-    cache["businesses"][cache_key]["hiring_signals"] = hiring_results[:5]
-    cache["businesses"][cache_key]["hiring_checked"] = True
+
+    biz_entry = cache.setdefault("businesses", {}).setdefault(cache_key, {})
+    biz_entry["hiring_signals"] = hiring_results[:5]
+    biz_entry["hiring_checked"] = True
+    biz_entry["hiring_role_match"] = role_match
     return hiring_found
 
 
