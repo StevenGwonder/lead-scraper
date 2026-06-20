@@ -4,7 +4,7 @@
 
 Scrapes SearXNG for local businesses (trades + admin/ops), audits websites
 for automation gaps, scores buying readiness (0-100), delivers HTML report.
-Ponytail v9: dead code removed, ~1399 lines, zero non-stdlib dependencies.
+Ponytail v9: dead code removed, ~1399 lines.
 """
 import argparse
 import json

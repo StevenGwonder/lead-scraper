@@ -446,5 +446,5 @@ echoed across 2+ review results does.
 ## 5. Out of scope (explicitly)
 - Calling any LLM from the runtime script (cron runs `no_agent: true`).
 - Outbound contact/automation of outreach — this tool ranks; humans pitch.
-- New third-party dependencies.
+- Gratuitous third-party dependencies (any new pip package must be installed on Hermes and justify its lift over stdlib).
 - Geographic expansion beyond the current Murrieta/Temecula/Wildomar set.
