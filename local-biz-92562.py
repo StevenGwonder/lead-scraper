@@ -151,6 +151,54 @@ NAME_SUFFIXES = [
     " - Threads", " | Threads", " - Reddit", " | Reddit",
 ]
 
+# ── SCORING MODEL ──────────────────────────────────────────────────────
+# Edit the ICP philosophy here — see PRD.md §2. (T1) Weights extracted from
+# qualify_lead verbatim; later tasks rebalance the values, not their location.
+SCORING = {
+    "automation": {
+        "max": 40,
+        "status_down": 25,
+        "status_blocked": 10,
+        "gap_weights": {
+            "no CRM": 15,
+            "no marketing tools": 10,
+            "no analytics": 5,
+            "no booking/chat system": 8,
+            "no booking system": 8,
+        },
+        "gap_default": 5,
+    },
+    "growth": {
+        "max": 30,
+        "hiring_signal": 15,
+        "trade_admin": 15,      # ADMIN_TRADES
+        "trade_high": 15,       # HVAC, Plumbing
+        "trade_moderate": 10,   # Electrical, Roofing, Auto Repair
+        "trade_other": 5,
+        "review_negative": 10,
+    },
+    "digital": {
+        "max": 15,
+        "down": 15,
+        "blocked": 8,
+        "ws_low": 12,           # website_score <= 1
+        "ws_2": 8,
+        "ws_3": 4,
+        "outdated_email": 5,
+        "fax": 5,
+    },
+    "contact": {
+        "max": 15,
+        "phone": 10,
+        "email": 5,
+        "own_site": 3,
+        "snippet": 2,
+    },
+    "trades_high": ("HVAC", "Plumbing"),
+    "trades_moderate": ("Electrical", "Roofing", "Auto Repair"),
+    "tiers": {"hot": 70, "warm": 40},
+}
+
 
 def log(msg):
     print(f"[local-biz] {msg}", file=sys.stderr)
@@ -531,134 +579,114 @@ def qualify_lead(biz, sq):
     breakdown = {}
     reasons = []
 
-    # ── AUTOMATION READINESS (0-40) ──
+    A = SCORING["automation"]
+    G = SCORING["growth"]
+    D = SCORING["digital"]
+    C = SCORING["contact"]
+
+    # ── AUTOMATION READINESS ──
     ar = 0
     gaps = sq.get("automation_gaps", sq.get("issues", []))
     status = sq.get("status", "unknown")
 
     if status == "down":
-        ar += 25  # No website at all = massive opportunity
-        reasons.append("no working website (+25)")
+        ar += A["status_down"]  # No website at all = massive opportunity
+        reasons.append(f"no working website (+{A['status_down']})")
     elif status == "blocked":
-        ar += 10  # Can't verify = unknown opportunity, moderate
-        reasons.append("site bot-protected, gaps unknown (+10)")
+        ar += A["status_blocked"]  # Can't verify = unknown opportunity, moderate
+        reasons.append(f"site bot-protected, gaps unknown (+{A['status_blocked']})")
     else:
-        # Phase 2: refined gap-based scoring
-        # no CRM detected = +15 (huge automation opportunity)
-        # no marketing tools = +10
-        # no analytics = +5
-        # other gaps (no booking system, no click-to-call, no contact page, not mobile-responsive, thin content) = +5 each
-        gap_weights = {
-            "no CRM": 15,
-            "no marketing tools": 10,
-            "no analytics": 5,
-            "no booking/chat system": 8,
-            "no booking system": 8,
-        }
         for g in gaps:
-            weight = gap_weights.get(g, 5)
+            weight = A["gap_weights"].get(g, A["gap_default"])
             ar += weight
             reasons.append(f"{g} (+{weight})")
-        ar = min(ar, 40)
+        ar = min(ar, A["max"])
 
-    breakdown["automation"] = min(ar, 40)
+    breakdown["automation"] = min(ar, A["max"])
 
-    # ── GROWTH SIGNALS (0-30) ──
+    # ── GROWTH SIGNALS ──
     growth = 0
     trade = biz.get("trade", "")
-    
-    # Phase 2: Hiring signals from SearXNG search (stored in biz)
+
+    # Hiring signals from SearXNG search (stored in biz)
     hiring_signals = biz.get("hiring_signals", [])
     if hiring_signals:
-        growth += 15
-        reasons.append("hiring signal detected (+15)")
-    elif biz.get("hiring_checked"):
-        # Was checked but no hiring signals — use trade-based fallback
-        if trade in ADMIN_TRADES:
-            growth += 15
-            reasons.append("admin/ops business — high automation demand (+15)")
-        elif trade in ("HVAC", "Plumbing"):
-            growth += 15
-            reasons.append("high-demand trade for automation (+15)")
-        elif trade in ("Electrical", "Roofing", "Auto Repair"):
-            growth += 10
-            reasons.append("moderate-demand trade (+10)")
-        else:
-            growth += 5
+        growth += G["hiring_signal"]
+        reasons.append(f"hiring signal detected (+{G['hiring_signal']})")
     else:
-        # Not yet checked — use trade-based proxy as before
+        # Trade-based proxy — identical whether hiring was checked-but-empty
+        # or not yet checked (the two old branches were duplicate code).
         if trade in ADMIN_TRADES:
-            growth += 15
-            reasons.append("admin/ops business — high automation demand (+15)")
-        elif trade in ("HVAC", "Plumbing"):
-            growth += 15
-            reasons.append("high-demand trade for automation (+15)")
-        elif trade in ("Electrical", "Roofing", "Auto Repair"):
-            growth += 10
-            reasons.append("moderate-demand trade (+10)")
+            growth += G["trade_admin"]
+            reasons.append(f"admin/ops business — high automation demand (+{G['trade_admin']})")
+        elif trade in SCORING["trades_high"]:
+            growth += G["trade_high"]
+            reasons.append(f"high-demand trade for automation (+{G['trade_high']})")
+        elif trade in SCORING["trades_moderate"]:
+            growth += G["trade_moderate"]
+            reasons.append(f"moderate-demand trade (+{G['trade_moderate']})")
         else:
-            growth += 5
+            growth += G["trade_other"]
 
-    # Phase 2: Negative review signals = business is losing customers (buying signal)
+    # Negative review signals = business is losing customers (buying signal)
     if biz.get("review_negative"):
-        growth += 10
-        reasons.append("negative reviews — losing customers (+10)")
-    
-    breakdown["growth"] = min(growth, 30)
+        growth += G["review_negative"]
+        reasons.append(f"negative reviews — losing customers (+{G['review_negative']})")
 
-    # ── DIGITAL GAP (0-15) ──
+    breakdown["growth"] = min(growth, G["max"])
+
+    # ── DIGITAL GAP ──
     dg = 0
     ws = sq.get("website_score", -1)
     if ws == -1:
         if status == "down":
-            dg += 15  # No website = biggest digital gap
-            reasons.append("completely invisible online (+15)")
+            dg += D["down"]  # No website = biggest digital gap
+            reasons.append(f"completely invisible online (+{D['down']})")
         elif status == "blocked":
-            dg += 8  # Unknown
+            dg += D["blocked"]  # Unknown
     elif ws <= 1:
-        dg += 12
-        reasons.append(f"website score {ws}/5 — major digital gap (+12)")
+        dg += D["ws_low"]
+        reasons.append(f"website score {ws}/5 — major digital gap (+{D['ws_low']})")
     elif ws == 2:
-        dg += 8
-        reasons.append(f"website score 2/5 — clear gaps (+8)")
+        dg += D["ws_2"]
+        reasons.append(f"website score 2/5 — clear gaps (+{D['ws_2']})")
     elif ws == 3:
-        dg += 4
-        reasons.append(f"website score 3/5 — some gaps (+4)")
+        dg += D["ws_3"]
+        reasons.append(f"website score 3/5 — some gaps (+{D['ws_3']})")
     # Score 4-5 = no gap, +0
 
-    # Phase 3: Digital laggard signals
+    # Digital laggard signals
     if sq.get("has_outdated_email"):
-        dg += 5
-        reasons.append("outdated email provider (digital laggard) (+5)")
+        dg += D["outdated_email"]
+        reasons.append(f"outdated email provider (digital laggard) (+{D['outdated_email']})")
     if sq.get("has_fax"):
-        dg += 5
-        reasons.append("fax number — paper-based operation (+5)")
+        dg += D["fax"]
+        reasons.append(f"fax number — paper-based operation (+{D['fax']})")
 
-    breakdown["digital"] = min(dg, 15)
+    breakdown["digital"] = min(dg, D["max"])
 
-    # ── CONTACTABILITY (0-15) ──
+    # ── CONTACTABILITY ──
     contact = 0
     phones = biz.get("phones", [])
     if phones:
-        contact += 10
-        reasons.append("phone found (+10)")
-    # Phase 3: Email found = +5
+        contact += C["phone"]
+        reasons.append(f"phone found (+{C['phone']})")
     emails = biz.get("emails", []) or sq.get("emails", [])
     if emails:
-        contact += 5
-        reasons.append(f"email found (+5)")
+        contact += C["email"]
+        reasons.append(f"email found (+{C['email']})")
     if biz.get("has_own_site"):
-        contact += 3  # Has a website = can find contact page
+        contact += C["own_site"]  # Has a website = can find contact page
     if biz.get("snippet") and len(biz.get("snippet", "")) > 50:
-        contact += 2  # Has a description = more info to work with
-    breakdown["contact"] = min(contact, 15)
+        contact += C["snippet"]  # Has a description = more info to work with
+    breakdown["contact"] = min(contact, C["max"])
 
     # ── TOTAL ──
     total = breakdown["automation"] + breakdown["growth"] + breakdown["digital"] + breakdown["contact"]
 
-    if total >= 70:
+    if total >= SCORING["tiers"]["hot"]:
         tier = "Hot"
-    elif total >= 40:
+    elif total >= SCORING["tiers"]["warm"]:
         tier = "Warm"
     else:
         tier = "Cold"

@@ -160,7 +160,11 @@ assume earlier ones landed.
 
 ---
 
-### - [ ] T1 — Extract all scoring weights into one declarative table
+### - [x] T1 — Extract all scoring weights into one declarative table
+> Done: added module-level `SCORING` dict; `qualify_lead` now reads every weight
+> from it. Pure refactor — verified identical scores (collapsed the two duplicate
+> hiring-fallback branches).
+
 **Prompt:** In `local-biz-92562.py`, add a single module-level dict named
 `SCORING` near the other top-level constants (after `REVIEW_COMPLAINT_KEYWORDS`,
 ~line 142). Move every magic number currently inside `qualify_lead` (~line 517)
