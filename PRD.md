@@ -412,7 +412,14 @@ try/except; some are arrays or `@graph`), and extracts from any `LocalBusiness`/
 **Acceptance:** A page whose phone appears only in JSON-LD returns that phone;
 malformed JSON-LD is skipped without crashing.
 
-### - [ ] T17 — Detect JS shells + exhaust UAs before "blocked" (fixes F17)
+### - [x] T17 — Detect JS shells + exhaust UAs before "blocked" (fixes F17)
+> Done: tiny readable text (<200 words) + an SPA bootstrap marker (id="root",
+> __NEXT_DATA__, data-reactroot, ng-version, etc.) → `("unknown","low")` instead of
+> "thin content". UA exhaustion landed with `_fetch_html` (T15): a 403 from one UA
+> tries the rest before declaring "blocked". Verified: React shell → unknown; real
+> content page → up.
+
+
 **Prompt:** In `check_website`: (a) after reading HTML, if the visible text is tiny
 (<200 words) **and** the page contains a shell marker (`id="root"`, `__NEXT_DATA__`,
 `data-reactroot`, `ng-version`, or a Wix/Squarespace app bootstrap), return

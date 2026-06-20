@@ -544,6 +544,13 @@ def check_website(domain):
     if len(html_lower) < 200:
         return _base_result("down", "low", ["near-empty page"])
 
+    # T17: JS-rendered shell — lots of <script>, almost no readable text, plus an
+    # SPA bootstrap marker → we couldn't read it. UNKNOWN, never "thin content".
+    text = re.sub(r'<[^>]+>', ' ', html_lower)
+    words = len(text.split())
+    if words < 200 and any(mk in html_lower for mk in JS_SHELL_MARKERS):
+        return _base_result("unknown", "low", ["JS-rendered — couldn't read content"])
+
     # ── platform + tools (homepage only) ──
     platform = "Custom"
     for marker, name in PLATFORMS.items():
@@ -609,8 +616,6 @@ def check_website(domain):
     if not marketing_tools: gaps.append("no marketing tools")
     if not analytics_tools: gaps.append("no analytics")
 
-    text = re.sub(r'<[^>]+>', ' ', html_lower)
-    words = len(text.split())
     if words < 200:
         gaps.append(f"thin content ({words}w)")
 
