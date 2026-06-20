@@ -1121,6 +1121,15 @@ body {
 }
 .footer .pitch strong { color: #D97548; font-style: normal; }
 
+/* Pitch line */
+.pitch-line {
+    margin-top: 8px; padding: 7px 10px;
+    background: rgba(96,207,244,0.05); border-left: 2px solid #60CFF4;
+    border-radius: 0 4px 4px 0; font-size: 0.8em; color: #60CFF4;
+    line-height: 1.4;
+}
+.pitch-label { font-weight: 600; color: #60CFF4; margin-right: 4px; }
+
 /* Collapsible details */
 details summary {
     cursor: pointer; color: #666; font-size: 0.78em;
@@ -1135,6 +1144,25 @@ details summary:hover { color: #60CFF4; }
     .lead-info { font-size: 0.72em; }
 }
 """
+
+
+def pitch_for(biz):
+    """T9: Derive a plain-English pitch line from the top buying signal.
+    ponytail: priority table, first match wins."""
+    trade = biz.get("trade", "")
+    if biz.get("review_negative"):
+        return "24/7 digital receptionist that answers + books every call — fix the slow-response complaints"
+    if biz.get("hiring_role_match"):
+        return "replace the role you're hiring for with a digital worker (no salary, no sick days)"
+    if trade in ADMIN_TRADES:
+        return "digital worker for intake, scheduling & follow-up — frees your staff for billable work"
+    if biz.get("hiring_signals"):
+        return "automate the role you're hiring for before you post the job"
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return "automated booking + reminders — capture every call that goes to voicemail"
+    return "digital worker to handle intake, scheduling & follow-up"
 
 
 def lead_score_badge(tier, score):
@@ -1166,16 +1194,17 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
         is_new = biz.get("first_seen", "") > new_cutoff
         biz["_new"] = is_new
 
-    # Categorize by lead tier
-    hot, warm, cold = [], [], []
+    # T9: Categorize by lead tier — Unverified is its own bucket, not Cold
+    hot, warm, cold, unverified = [], [], [], []
     for biz in businesses.values():
         ls = biz.get("lead_score", {})
-        score = ls.get("score", 0)
         tier = ls.get("tier", "Cold")
         if tier == "Hot":
             hot.append(biz)
         elif tier == "Warm":
             warm.append(biz)
+        elif tier == "Unverified":
+            unverified.append(biz)
         else:
             cold.append(biz)
 
@@ -1264,12 +1293,18 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
             html += '<span class="lead-status status-blocked">● UNVERIFIED</span>'
         html += '</div>'
 
-        # Qualification reasons (why this lead is qualified)
-        if reasons:
-            html += '<div class="lead-reasons">'
-            for r in reasons[:6]:
+        # T9: "Pitch this:" — the concrete offer, derived from signals (not scoring internals)
+        if tier in ("Hot", "Warm"):
+            pitch = pitch_for(biz)
+            html += f'<div class="pitch-line"><span class="pitch-label">Pitch this:</span>{pitch}</div>'
+
+        # T9: scoring reasons go into a collapsible detail, not the headline
+        signal_reasons = [r for r in reasons if not r.startswith("no contact info")]
+        if signal_reasons:
+            html += '<details><summary>Why this score</summary><div class="lead-reasons">'
+            for r in signal_reasons[:8]:
                 html += f'<span class="reason-tag">{r}</span>'
-            html += '</div>'
+            html += '</div></details>'
 
         html += '</div>'
         return html
@@ -1309,6 +1344,20 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
             section += render_lead_card(biz)
         if len(cold) > 10:
             section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(cold)-10} more cold leads...</p>'
+        section += '</details></div>'
+        cards.append(section)
+
+    # T9: UNVERIFIED — site unreadable, no external signals, no contact info
+    # Collapsed by default; don't pollute the actionable lead stream
+    if unverified:
+        section = '<div class="section">'
+        section += '<div class="section-title"><h2>🛰️ Unverified — couldn\'t confirm</h2>'
+        section += f'<span class="badge badge-cold">{len(unverified)}</span></div>'
+        section += f'<details><summary>{len(unverified)} businesses — site unreadable, no external signal, low confidence</summary>'
+        for biz in unverified[:8]:
+            section += render_lead_card(biz)
+        if len(unverified) > 8:
+            section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(unverified)-8} more...</p>'
         section += '</details></div>'
         cards.append(section)
 
