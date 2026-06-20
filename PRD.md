@@ -376,7 +376,14 @@ verify"])`. Add `"unknown"` as a recognized status everywhere it's checked
 **Acceptance:** A host that times out reports `status="unknown"`, confidence
 `"low"`; no error path returns `"high"` confidence.
 
-### - [ ] T15 — Read enough to be honest: deeper fetch + contact/about + www fallback (fixes F16)
+### - [x] T15 — Read enough to be honest: deeper fetch + contact/about + www fallback (fixes F16)
+> Done: split fetching into `_fetch_html` (UA exhaustion, 20s timeout, one backoff
+> retry, 150KB budget) + `_absolutize`. `check_website` now tries https/www/non-www
+> candidates, then pulls up to 2 `/contact`+`/about` subpages (≤4 fetches total) and
+> scans the full combined text for phones/contact. Verified: live fetch up/high;
+> unreachable → unknown/low.
+
+
 **Prompt:** In `check_website`, raise the page read budget from 12 KB to 150 KB
 (`[:150000]`) and the phone scan from 5 KB to the full fetched text; raise
 `timeout` to 20 s and add one retry with a 3 s backoff. After fetching the

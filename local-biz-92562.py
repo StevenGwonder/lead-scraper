@@ -343,6 +343,18 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
 ]
 
+# T15/T17: deeper, honester fetching
+FETCH_TIMEOUT = 20            # seconds per request (was 12 — slow small-biz hosts)
+FETCH_BUDGET = 150000        # bytes read per page (was 12000 — phones live in footers)
+MAX_FETCHES = 4              # distinct URL fetches per business (candidates + subpages)
+MAX_SUBPAGE_FETCHES = 2      # how many /contact + /about pages to pull in
+# T17: SPA bootstrap markers. A near-empty page carrying one of these is a
+# JS-rendered shell we couldn't read — UNKNOWN, not a thin/dead site.
+JS_SHELL_MARKERS = (
+    'id="root"', "id='root'", "__next_data__", "data-reactroot", "ng-version",
+    'id="__nuxt"', 'id="app"', "data-react-helmet", "data-server-rendered",
+)
+
 
 def _detect_markers(html_lower, marker_dict):
     """Helper: detect which named tools are present in lowercased HTML. Returns list of names found."""
@@ -387,99 +399,175 @@ def _base_result(status, confidence, gaps):
             "words": 0, "phones": [],
             "has_crm": [], "has_analytics": [], "has_marketing_tools": [],
             "has_booking_system": [], "emails": [],
-            "has_outdated_email": False, "has_fax": False}
+            "has_outdated_email": False, "has_fax": False, "socials": []}
 
 
-def check_website(domain):
-    """Phase 1+2+3: Robust website check with SSL fallback, multi-UA, honest status."""
-    for scheme in ["https", "http"]:
+def _absolutize(href, base_url, base_domain):
+    """Resolve an href to a same-domain absolute URL, or None if off-site/non-http."""
+    href = href.strip()
+    if not href or href[0] == "#" or href.lower().startswith(("mailto:", "tel:", "javascript:")):
+        return None
+    if href.startswith("//"):
+        return None
+    if href.lower().startswith(("http://", "https://")):
+        host = re.sub(r'https?://(www\.)?', '', href.lower()).split('/')[0]
+        return href if base_domain in host else None
+    return urllib.parse.urljoin(base_url, href)
+
+
+def _fetch_html(url, timeout=FETCH_TIMEOUT, retries=1):
+    """Fetch one URL, rotating ALL user-agents before giving up (so a single 403
+    from the first UA doesn't declare the whole site blocked). One backoff retry
+    on transient failure. Returns {"ok":True,"html","final_url"} or
+    {"ok":False,"reason":"blocked"|"http"|"unreachable","code":...}."""
+    blocked = False
+    http_code = None
+    for attempt in range(retries + 1):
         for ua in USER_AGENTS:
             try:
                 req = urllib.request.Request(
-                    f"{scheme}://{domain}",
-                    headers={"User-Agent": ua, "Accept": "text/html,application/xhtml+xml"}
-                )
-                with urllib.request.urlopen(req, timeout=12, context=_NOVERIFY_CTX) as resp:
-                    html = resp.read().decode("utf-8", errors="ignore")[:12000]
-                    html_lower = html.lower()
-
-                    if "cf-browser-verification" in html_lower or "checking your browser" in html_lower or "cf-challenge" in html_lower:
-                        return _base_result("blocked", "low", ["bot-protected — can't verify"])
-
-                    if len(html_lower) < 200:
-                        continue
-
-                    gaps = []
-                    platform = "Custom"
-                    for marker, name in PLATFORMS.items():
-                        if marker in html_lower:
-                            platform = name
-                    if "elementor" in html_lower and "wordpress" in platform.lower():
-                        platform = "WordPress/Elementor"
-
-                    crm_tools = _detect_markers(html_lower, CRM_MARKERS)
-                    analytics_tools = _detect_markers(html_lower, ANALYTICS_MARKERS)
-                    marketing_tools = _detect_markers(html_lower, MARKETING_MARKERS)
-                    booking_tools = _detect_markers(html_lower, BOOKING_MARKERS)
-                    emails = _extract_emails(html)
-                    has_outdated_email = any(any(od in addr for od in OUTDATED_EMAIL_DOMAINS) for addr in emails)
-                    has_fax = bool(re.search(r'fax[\s:.]*[\(\d]{1,2}[\d\s\-\.\/\(\)]{10,}', html_lower))
-
-                    has_viewport = "viewport" in html_lower
-                    has_tel = "tel:" in html_lower
-                    has_contact = "contact" in html_lower
-                    has_booking_system = bool(booking_tools)
-                    has_chat = any(x in html_lower for x in ["chat", "intercom", "tawk", "drift", "olark"])
-
-                    if not has_booking_system and not has_chat:
-                        gaps.append("no booking/chat system")
-                    elif not has_booking_system:
-                        gaps.append("no booking system")
-                    if not has_tel: gaps.append("no click-to-call")
-                    if not has_contact: gaps.append("no contact page")
-                    if not has_viewport: gaps.append("not mobile-responsive")
-                    if not crm_tools: gaps.append("no CRM")
-                    if not marketing_tools: gaps.append("no marketing tools")
-                    if not analytics_tools: gaps.append("no analytics")
-
-                    text = re.sub(r'<[^>]+>', ' ', html_lower)
-                    words = len(text.split())
-                    if words < 200:
-                        gaps.append(f"thin content ({words}w)")
-
-                    website_score = sum([has_viewport, has_tel, has_contact, words > 200, has_booking_system or has_chat])
-
-                    page_phones = extract_phones(html[:5000])
-                    tel_matches = re.findall(r'href=["\']tel:([+\d\s()\-\.]+)', html, re.I)
-                    for tm in tel_matches:
-                        digits = re.sub(r'\D', '', tm)
-                        if len(digits) == 10:
-                            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-                            if formatted not in page_phones:
-                                page_phones.append(formatted)
-
-                    return {"status": "up", "confidence": "high",
-                            "website_score": website_score, "automation_gaps": gaps,
-                            "platform": platform, "words": words, "phones": page_phones,
-                            "has_crm": crm_tools, "has_analytics": analytics_tools,
-                            "has_marketing_tools": marketing_tools,
-                            "has_booking_system": booking_tools, "emails": emails,
-                            "has_outdated_email": has_outdated_email, "has_fax": has_fax}
-
+                    url, headers={"User-Agent": ua, "Accept": "text/html,application/xhtml+xml"})
+                with urllib.request.urlopen(req, timeout=timeout, context=_NOVERIFY_CTX) as resp:
+                    html = resp.read().decode("utf-8", errors="ignore")[:FETCH_BUDGET]
+                    return {"ok": True, "html": html, "final_url": resp.geturl()}
             except urllib.error.HTTPError as e:
                 if e.code in (403, 401, 429):
-                    return _base_result("blocked", "low", ["bot-protected — can't verify"])
-                if e.code == 404:
+                    blocked = True       # try the other UAs before concluding "blocked"
                     continue
-                # T14: a 4xx/5xx (often the server rejecting *our* request) is not
-                # evidence about the business — it's UNKNOWN, not opportunity.
-                return _base_result("unknown", "low", [f"HTTP {e.code} — can't verify"])
+                http_code = e.code       # 404 / 5xx — try next UA too
+                continue
             except (urllib.error.URLError, Exception):
                 continue
-    # T14: we exhausted every scheme/UA without connecting. We did NOT observe a
-    # dead site — we failed to reach it. Report UNKNOWN/low, never "down"/high.
-    # ("down" is reserved for a page we connected to that is genuinely dead/parked.)
-    return _base_result("unknown", "low", ["unreachable — couldn't connect"])
+        if attempt < retries:
+            time.sleep(3)
+    if blocked:
+        return {"ok": False, "reason": "blocked", "code": 403}
+    if http_code:
+        return {"ok": False, "reason": "http", "code": http_code}
+    return {"ok": False, "reason": "unreachable", "code": None}
+
+
+def check_website(domain):
+    """Robust, honest website check. Deep read (150KB), 20s timeout + retry,
+    www/non-www fallback, and a /contact + /about crawl to fill phone/contact gaps
+    so we stop reporting false "no phone / no contact" on pages that are fine.
+    Failed fetches return UNKNOWN, never confident "down" (see T13/T14)."""
+    base = domain[4:] if domain.lower().startswith("www.") else domain
+    candidates = [f"https://{base}", f"https://www.{base}", f"http://{base}"]
+
+    page = None
+    blocked = False
+    http_err = None
+    fetches = 0
+    for i, url in enumerate(candidates):
+        if fetches >= MAX_FETCHES:
+            break
+        fetches += 1
+        res = _fetch_html(url, retries=1 if i == 0 else 0)
+        if res["ok"]:
+            page = res
+            break
+        if res["reason"] == "blocked":
+            blocked = True
+        elif res["reason"] == "http":
+            http_err = res.get("code")
+
+    if page is None:
+        if blocked:
+            return _base_result("blocked", "low", ["bot-protected — can't verify"])
+        if http_err:
+            return _base_result("unknown", "low", [f"HTTP {http_err} — can't verify"])
+        return _base_result("unknown", "low", ["unreachable — couldn't connect"])
+
+    html = page["html"]
+    html_lower = html.lower()
+
+    if any(m in html_lower for m in ("cf-browser-verification", "checking your browser", "cf-challenge")):
+        return _base_result("blocked", "low", ["bot-protected — can't verify"])
+
+    # Near-empty page we *connected* to = genuinely dead/parked (T14 reserves "down").
+    if len(html_lower) < 200:
+        return _base_result("down", "low", ["near-empty page"])
+
+    # ── platform + tools (homepage only) ──
+    platform = "Custom"
+    for marker, name in PLATFORMS.items():
+        if marker in html_lower:
+            platform = name
+    if "elementor" in html_lower and "wordpress" in platform.lower():
+        platform = "WordPress/Elementor"
+
+    crm_tools = _detect_markers(html_lower, CRM_MARKERS)
+    analytics_tools = _detect_markers(html_lower, ANALYTICS_MARKERS)
+    marketing_tools = _detect_markers(html_lower, MARKETING_MARKERS)
+    booking_tools = _detect_markers(html_lower, BOOKING_MARKERS)
+
+    # ── T15: pull in /contact and /about to fill contact/phone gaps ──
+    combined = html
+    sub_links = []
+    for href in re.findall(r'href=["\']([^"\']+)["\']', html, re.I):
+        if any(k in href.lower() for k in ("contact", "about")):
+            full = _absolutize(href, page["final_url"], base)
+            if full and full not in sub_links:
+                sub_links.append(full)
+        if len(sub_links) >= MAX_SUBPAGE_FETCHES:
+            break
+    for link in sub_links:
+        if fetches >= MAX_FETCHES:
+            break
+        fetches += 1
+        sub = _fetch_html(link, retries=0)
+        if sub["ok"]:
+            combined += "\n" + sub["html"]
+    combined_lower = combined.lower()
+
+    # ── signals (combined homepage + subpages) ──
+    emails = _extract_emails(combined)
+    has_fax = bool(re.search(r'fax[\s:.]*[\(\d]{1,2}[\d\s\-\.\/\(\)]{10,}', combined_lower))
+
+    has_viewport = "viewport" in html_lower
+    has_tel = "tel:" in combined_lower
+    has_contact = ("contact" in combined_lower) or bool(sub_links)
+    has_booking_system = bool(booking_tools)
+    has_chat = any(x in html_lower for x in ["chat", "intercom", "tawk", "drift", "olark"])
+
+    gaps = []
+    if not has_booking_system and not has_chat:
+        gaps.append("no booking/chat system")
+    elif not has_booking_system:
+        gaps.append("no booking system")
+    if not has_tel: gaps.append("no click-to-call")
+    if not has_contact: gaps.append("no contact page")
+    if not has_viewport: gaps.append("not mobile-responsive")
+    if not crm_tools: gaps.append("no CRM")
+    if not marketing_tools: gaps.append("no marketing tools")
+    if not analytics_tools: gaps.append("no analytics")
+
+    text = re.sub(r'<[^>]+>', ' ', html_lower)
+    words = len(text.split())
+    if words < 200:
+        gaps.append(f"thin content ({words}w)")
+
+    website_score = sum([has_viewport, has_tel, has_contact, words > 200, has_booking_system or has_chat])
+
+    page_phones = extract_phones(combined)
+    for tm in re.findall(r'href=["\']tel:([+\d\s()\-\.]+)', combined, re.I):
+        digits = re.sub(r'\D', '', tm)
+        if len(digits) == 10:
+            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+            if formatted not in page_phones:
+                page_phones.append(formatted)
+
+    has_outdated_email = any(any(od in addr for od in OUTDATED_EMAIL_DOMAINS) for addr in emails)
+
+    return {"status": "up", "confidence": "high",
+            "website_score": website_score, "automation_gaps": gaps,
+            "platform": platform, "words": words, "phones": page_phones,
+            "has_crm": crm_tools, "has_analytics": analytics_tools,
+            "has_marketing_tools": marketing_tools,
+            "has_booking_system": booking_tools, "emails": emails[:5],
+            "has_outdated_email": has_outdated_email, "has_fax": has_fax,
+            "socials": []}
 
 
 def search_hiring_signals(biz_name, cache_key, cache):
