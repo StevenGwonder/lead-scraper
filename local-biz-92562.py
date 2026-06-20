@@ -391,6 +391,61 @@ def _extract_emails(html):
     return emails[:5]
 
 
+def parse_jsonld(html):
+    """T16: Extract authoritative contact facts from schema.org JSON-LD blocks
+    (`<script type="application/ld+json">`). Far more reliable than regex on
+    rendered text. Best-effort and never raises — malformed blocks are skipped.
+    Returns {"phones","emails","socials","address","hours"}."""
+    out = {"phones": [], "emails": [], "socials": [], "address": "", "hours": []}
+    blocks = re.findall(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html, re.I | re.S)
+    nodes = []
+
+    def collect(d):
+        if isinstance(d, list):
+            for x in d:
+                collect(x)
+        elif isinstance(d, dict):
+            if "@graph" in d:
+                collect(d["@graph"])
+            nodes.append(d)
+
+    for blk in blocks:
+        try:
+            collect(json.loads(blk.strip()))
+        except Exception:
+            continue  # malformed JSON-LD — skip, don't crash
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        tel = node.get("telephone")
+        if isinstance(tel, str):
+            out["phones"].append(tel)
+        em = node.get("email")
+        if isinstance(em, str):
+            out["emails"].append(em.replace("mailto:", "").strip().lower())
+        same = node.get("sameAs")
+        if isinstance(same, str):
+            out["socials"].append(same)
+        elif isinstance(same, list):
+            out["socials"] += [s for s in same if isinstance(s, str)]
+        addr = node.get("address")
+        if isinstance(addr, dict):
+            parts = [addr.get(k, "") for k in
+                     ("streetAddress", "addressLocality", "addressRegion", "postalCode")]
+            out["address"] = out["address"] or ", ".join(p for p in parts if p)
+        elif isinstance(addr, str):
+            out["address"] = out["address"] or addr
+        hrs = node.get("openingHours")
+        if isinstance(hrs, str):
+            out["hours"].append(hrs)
+        elif isinstance(hrs, list):
+            out["hours"] += [h for h in hrs if isinstance(h, str)]
+    return out
+
+
 def _base_result(status, confidence, gaps):
     """Base result dict for check_website — avoids repeating 13 keys 4 times."""
     return {"status": status, "confidence": confidence,
@@ -521,8 +576,19 @@ def check_website(domain):
             combined += "\n" + sub["html"]
     combined_lower = combined.lower()
 
+    # ── T16: schema.org JSON-LD is authoritative — merge its contact facts ──
+    jl = parse_jsonld(combined)
+    socials = []
+    for s in jl["socials"]:
+        if s not in socials:
+            socials.append(s)
+
     # ── signals (combined homepage + subpages) ──
     emails = _extract_emails(combined)
+    for e in jl["emails"]:
+        e = e.strip().lower()
+        if "@" in e and len(e) < 80 and e not in emails:
+            emails.append(e)
     has_fax = bool(re.search(r'fax[\s:.]*[\(\d]{1,2}[\d\s\-\.\/\(\)]{10,}', combined_lower))
 
     has_viewport = "viewport" in html_lower
@@ -557,6 +623,11 @@ def check_website(domain):
             formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
             if formatted not in page_phones:
                 page_phones.append(formatted)
+    # T16: JSON-LD telephone is authoritative — normalize and merge
+    for t in jl["phones"]:
+        for formatted in extract_phones(t):
+            if formatted not in page_phones:
+                page_phones.append(formatted)
 
     has_outdated_email = any(any(od in addr for od in OUTDATED_EMAIL_DOMAINS) for addr in emails)
 
@@ -567,7 +638,7 @@ def check_website(domain):
             "has_marketing_tools": marketing_tools,
             "has_booking_system": booking_tools, "emails": emails[:5],
             "has_outdated_email": has_outdated_email, "has_fax": has_fax,
-            "socials": []}
+            "socials": socials[:6]}
 
 
 def search_hiring_signals(biz_name, cache_key, cache):

@@ -395,7 +395,13 @@ merge their findings. Try both `domain` and `www.{domain}` (and strip a leading
 **Acceptance:** A site with its phone only in the footer or on `/contact` is now
 found; "no contact page" no longer fires when a `/contact` link exists.
 
-### - [ ] T16 — Parse JSON-LD structured data (fixes F18)
+### - [x] T16 — Parse JSON-LD structured data (fixes F18)
+> Done: added `parse_jsonld` (handles arrays + `@graph`, skips malformed blocks).
+> `check_website` merges JSON-LD `telephone` (normalized via `extract_phones`) and
+> `email` into the result and surfaces `sameAs` socials. Verified: a phone present
+> only in JSON-LD is returned; a broken block doesn't crash.
+
+
 **Prompt:** Add a helper `parse_jsonld(html)` that finds every
 `<script type="application/ld+json">…</script>` block, `json.loads` each (wrap in
 try/except; some are arrays or `@graph`), and extracts from any `LocalBusiness`/
