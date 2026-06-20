@@ -4,10 +4,12 @@
 > only one to avoid drift.
 
 This repo is a **cron-driven lead-generation pipeline for North Web Pro**, an
-automation specialist. The seller's offer is **digital workers on retainer** —
-recurring monthly service that replaces boring, repetitive human labor (phone
-answering, scheduling, intake, follow-up, data entry) and can build anything from
-software to apps to websites to support it.
+**AI consultancy**. The seller's offer is **custom software and AI agents on
+retainer** that remove repetitive, manual, human-bottlenecked work — phone
+answering, scheduling, intake, follow-up, data entry, document handling — so a
+client can move onto the new digital frontier instead of being slowed by old
+ways and bad habits. **North Web Pro does not sell websites.** A site audit is
+only useful here as evidence of *manual operational drag*, never as the product.
 
 Read this before touching code. Then pick a task from `PRD.md`.
 
@@ -28,21 +30,61 @@ Before you add or reweight any signal, ask: **"Does this measure repetitive work
 volume, a named pain, or ability to pay?"** If not, it does not belong in the
 score.
 
+## 1b. The second rule: never score what you couldn't observe
+
+Most "Hot" leads today are **the crawler's own failures scored as opportunity** —
+a timeout, a TLS error, a 400/403, or a JavaScript-rendered page the scraper
+can't read all collapse into `status="down"/"blocked"` and earn +40 points. The
+script is mining its own error log.
+
+Every signal has **three** states, and they must never be merged:
+
+| State | Meaning | Scores |
+|-------|---------|--------|
+| **PRESENT** | We *observed* it (saw the phone, the job posting, the complaint) | The only thing that earns buying points |
+| **ABSENT** | We fully read the page and it genuinely isn't there | Neutral / weak at most |
+| **UNKNOWN** | Error, blocked, timeout, or JS shell — we couldn't tell | **Zero points. Quarantined. Never Hot.** |
+
+Rules that follow from this:
+- **Confidence-gate every positive point.** A point may only be awarded when the
+  source was actually read (`confidence == "high"`, `status == "up"`, or a
+  structured/external source like a job posting). Down/blocked/error/JS-shell →
+  zero, routed to the **Unverified** bucket.
+- **Absence is not evidence.** "We didn't find a phone in the first 5 KB of the
+  homepage" is not "no phone." Read more, read the contact page, parse JSON-LD —
+  or report UNKNOWN, never a confident negative.
+- **Corroborate.** A soft signal counts only if seen in ≥2 independent places, or
+  it comes from a structured source (job posting, schema.org JSON-LD).
+
 ---
 
 ## 2. The Ideal Customer Profile (ICP)
 
-A great retainer client has **all three**:
+A great retainer client carries **manual operational drag that software/agents
+remove**, and shows it through signals ranked by how *verifiable* they are (so we
+score facts, not guesses):
 
-1. **Volume of boring, repeatable work** — admin/ops businesses (law, accounting,
-   insurance, property management, recruiting, consulting), or appointment-heavy
-   trades drowning in scheduling and callbacks.
-2. **A named pain** — reviews complaining "no callback," "slow," "unresponsive,"
-   "hard to reach." That is *exactly* the pain a 24/7 digital receptionist fixes.
-3. **Budget + growth** — actively hiring (especially for receptionist / scheduler
-   / intake / dispatch / admin / data-entry roles → they are about to pay a human
-   $40k/yr for an automatable job), multiple locations, multiple phone lines, a
-   team/careers page.
+**Tier 1 — structured / externally verifiable (trust these):**
+- **Job postings for automatable roles** — receptionist, scheduler, intake
+  coordinator, dispatcher, data-entry, AR/AP clerk, office/appointment
+  coordinator. A real posting is hard evidence they are about to pay a human
+  $40–60k/yr for work an agent does. Strongest signal; corroborated by a source,
+  not inferred from a failed fetch.
+- **Multiple locations / multiple phone lines / a careers page** → operational
+  complexity + budget for a retainer.
+
+**Tier 2 — named pain (trust when corroborated about the right business, recent):**
+- Review complaints about responsiveness — "no callback," "slow," "couldn't reach
+  them," "waited days." Exactly the pain our agents remove, stated by the customer.
+
+**Tier 3 — manual-process tells (supporting evidence only, and only when the page
+was actually read — confidence high):**
+- "Call to book" with no online scheduling; "download this PDF and email it back";
+  "allow 24–48 hours for a reply"; fax; a contact form that clearly routes to a
+  person. These signal "old ways," but never count them from a blocked/UNKNOWN fetch.
+
+Note: a beautiful website does **not** disqualify a lead — a business can have a
+great site and still drown in manual intake. We are not grading websites.
 
 A lead you **cannot contact** (no phone, no email) is not a lead. Contactability
 is a gate, not a bonus.
