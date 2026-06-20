@@ -924,13 +924,27 @@ def _test_qualify_lead():
                         "automation_gaps": ["no booking system"], "emails": []})
     assert r5["tier"] != "Hot", f"T5 fail: gap-stacking → Hot (score={r5['score']})"
 
-    # T5: admin + complaint + phone → Hot
+    # T5+T18: admin + corroborated complaint + phone → Hot
+    # Two review_signals entries each with complaints satisfies corroborated()
     r6 = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
                         "own_domains": ["c.com"], "review_negative": True,
+                        "review_signals": [
+                            {"complaints": ["slow"], "title": "r1"},
+                            {"complaints": ["no response"], "title": "r2"},
+                        ],
                         "hiring_signals": [], "hiring_role_match": False},
                        {"status": "up", "confidence": "high", "website_score": 2,
                         "automation_gaps": [], "emails": []})
-    assert r6["tier"] == "Hot", f"T5 fail: admin+complaint → {r6['tier']} (score={r6['score']})"
+    assert r6["tier"] == "Hot", f"T5 fail: admin+corroborated-complaint → {r6['tier']} (score={r6['score']})"
+
+    # T18: single complaint (no corroboration) does NOT earn named_pain points
+    r7 = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
+                        "own_domains": ["d.com"], "review_negative": True,
+                        "review_signals": [{"complaints": ["slow"], "title": "r1"}],
+                        "hiring_signals": [], "hiring_role_match": False},
+                       {"status": "up", "confidence": "high", "website_score": 2,
+                        "automation_gaps": [], "emails": []})
+    assert r7["breakdown"]["named_pain"] == 0, f"T18 fail: single complaint → named_pain={r7['breakdown']['named_pain']}"
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -1656,7 +1670,7 @@ def main():
                 if any(s in domain for s in skip):
                     continue
                 if "facebook.com/groups" in url.lower():
-                    cache.setdefault("fb_groups", []).append({"name": title[:60], "url": key})
+                    cache.setdefault("fb_groups", []).append({"name": title[:60], "url": key, "date": now.isoformat()})
                     continue
                 text = (title + " " + snippet).lower()
                 is_person = any(d in domain for d in ["reddit.com", "facebook.com"])
