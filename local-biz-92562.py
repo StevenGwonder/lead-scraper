@@ -922,17 +922,26 @@ def _test_qualify_lead():
 
 
 def load_cache():
-    """Load the business cache from disk."""
+    """T8: Tier-aware TTL — Hot/Warm kept 30 days, Cold/Unverified 7 days.
+    Also prunes signals and fb_groups older than 14 days."""
     if CACHE_FILE.exists():
         try:
-            with open(CACHE_FILE) as f:
+            with open(CACHE_FILE, encoding="utf-8") as f:
                 cache = json.load(f)
-            # Expire entries older than 7 days
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-            cache["businesses"] = {
-                k: v for k, v in cache.get("businesses", {}).items()
-                if v.get("last_seen", "") > cutoff
-            }
+            now_iso = datetime.now(timezone.utc)
+            cutoff_hot  = (now_iso - timedelta(days=30)).isoformat()
+            cutoff_cold = (now_iso - timedelta(days=7)).isoformat()
+            cutoff_sig  = (now_iso - timedelta(days=14)).isoformat()
+
+            def _keep(v):
+                tier = v.get("lead_score", {}).get("tier", "Cold")
+                cutoff = cutoff_hot if tier in ("Hot", "Warm") else cutoff_cold
+                return v.get("last_seen", "") > cutoff
+
+            cache["businesses"] = {k: v for k, v in cache.get("businesses", {}).items() if _keep(v)}
+            # Prune stale signals/fb_groups (no date field → keep to be safe)
+            cache["signals"] = [s for s in cache.get("signals", []) if s.get("date", "z") > cutoff_sig]
+            cache["fb_groups"] = [g for g in cache.get("fb_groups", []) if g.get("date", "z") > cutoff_sig]
             return cache
         except (json.JSONDecodeError, KeyError):
             pass
