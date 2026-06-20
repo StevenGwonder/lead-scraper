@@ -1,6 +1,7 @@
 # PRD — Rebalancing Lead Scout for *actual* leads, not crawler artifacts
 
-**Owner:** North Web Pro (automation specialist — digital workers on retainer)
+**Owner:** North Web Pro (AI consultancy — custom software + AI agents on retainer
+that remove manual operational drag; **not a website seller**)
 **Pipeline:** `local-biz-92562.py`
 **Branch:** `claude/cron-script-lead-capture-yeqpn4`
 **Status:** Proposed — tasks below are unstarted.
@@ -29,9 +30,26 @@ Meanwhile the signals that actually predict an automation buyer —
 roles** — are collected but underweighted, double-counted, or detected so
 loosely they're nearly random.
 
-**Goal:** Re-point both the *navigation* (scoring + sort order) and the
-*narrative* (the HTML report) at real buying readiness, so the salesperson's
-time goes to businesses that can and will pay monthly.
+**The deeper defect — hallucination from errors.** The "no page / no phone / site
+down" results are frequently false, and the cause is systematic, not random: the
+crawler treats **"we couldn't read it"** the same as **"it isn't there,"** and
+then scores that absence as opportunity. A timeout, a TLS failure, a 400/403, or a
+JavaScript-rendered page all become `status="down"/"blocked"` → +40 points. The
+script collects a `confidence` field and then **never reads it.** This is why a
+site that looks fine in your browser comes back as "no phone, site down" — it was
+read 5 KB deep, homepage-only, in 12 seconds, un-rendered. See the new **Signal
+Reliability** section (§2b) and findings F13–F18.
+
+**Positioning correction.** North Web Pro is an **AI consultancy**, not a website
+seller. The "Website Quality 0–5" rubric is demoted from headline metric to a
+minor *"is the page even real / is it a manual operation"* check. Buyer signals
+are reframed around manual operational drag (job postings for automatable roles,
+responsiveness complaints, manual-process tells).
+
+**Goal:** Re-point the *navigation* (scoring + sort order), the *narrative* (the
+HTML report), **and the *reliability*** (only score what we actually observed) at
+real buying readiness — so the operator's time goes to businesses that genuinely
+carry automatable work and can pay monthly.
 
 ---
 
@@ -70,6 +88,43 @@ at the top of the file.
 
 ---
 
+## 2b. Signal Reliability & Confidence Gating (the anti-hallucination layer)
+
+Every signal has **three** states; the code currently has only two ("found" /
+"not found") and scores the merge as opportunity.
+
+| State | Meaning | Scores |
+|-------|---------|--------|
+| **PRESENT** | We observed it (saw phone, job posting, complaint) | Earns buying points |
+| **ABSENT** | We fully read the source and it isn't there | Neutral / weak |
+| **UNKNOWN** | Error / blocked / timeout / JS shell | **Zero. Quarantined. Never Hot.** |
+
+Target behavior:
+
+1. **Confidence gate.** `qualify_lead` awards positive points only when the
+   evidence was actually observed: `status == "up"` and `confidence == "high"`,
+   or the signal came from a structured/external source (job posting, JSON-LD).
+   Down/blocked/error/JS-shell → 0 points → **Unverified** bucket.
+2. **Stop confidently mislabeling errors.** A fetch that times out, fails TLS, or
+   returns 400/500 must be reported as **UNKNOWN/low confidence**, not
+   `("down", "high")`. Down ("we connected and the site is genuinely dead/parked")
+   must be distinguished from unreachable ("we couldn't connect").
+3. **Read enough to be honest.** Raise the read budget (12 KB → ~150 KB), raise
+   timeout (12 s → ~20 s) with one retry, fetch `/contact` and `/about`, and try
+   www↔non-www before concluding anything is "missing."
+4. **Parse structured data.** Extract `<script type="application/ld+json">`
+   (`LocalBusiness` → `telephone`, `address`, `openingHours`, `sameAs`). This is
+   far more reliable than regex on rendered text and kills most false "no phone."
+5. **Detect JS shells** (tiny text + `id="root"` / `__NEXT_DATA__` / wix /
+   squarespace markers) → mark UNKNOWN, never "thin content."
+6. **Exhaust all UAs/schemes** before declaring "blocked."
+7. **Corroborate soft signals** — count a Tier-2/3 signal only if seen in ≥2
+   independent places or from a structured source.
+8. **Drop `no analytics` / `no marketing` from scoring** — unmeasurable reliably
+   and irrelevant to AI consulting (keep detection for display only).
+
+---
+
 ## 3. Findings (catalogue — each maps to a task)
 
 | # | Finding | Severity | Location |
@@ -86,6 +141,12 @@ at the top of the file.
 | F10 | Job boards excluded as aggregators — discards the richest automatable-role signal for this ICP | Med | `AGGREGATOR_DOMAINS`, signal filter |
 | F11 | Report reasons are scoring internals, not pitch angles | Med | `render_lead_card` ~1000 |
 | F12 | Dead code/comment drift: `sq.get(...,"issues")` legacy key (~536); phone comment claims 800/888 skip but code skips 000/999 (~277) | Low | as noted |
+| F13 | `confidence` field is collected then **never read** by scoring — low-confidence guesses score like verified facts | High | `qualify_lead` vs `check_website` |
+| F14 | Unreachable sites are confidently labeled `("down","high")` — timeout/TLS/exception all become "site down, high confidence" → +40 | High | `check_website` ~427–429 |
+| F15 | 400/500 (often the server rejecting our own request) → `"blocked"` → scored as opportunity | High | `check_website` ~426 |
+| F16 | Truncated/partial reads cause false negatives: 12 KB page cap (~355), 5 KB phone scan (~404), homepage-only (no /contact, /about), 12 s timeout | High | `check_website` 354–404 |
+| F17 | JS-rendered sites read as empty → false "thin content / not mobile / no tools"; first 403 returns "blocked" without trying other UAs/schemes | High | `check_website` ~361, ~421–423 |
+| F18 | No structured-data parsing (JSON-LD `LocalBusiness`) — most reliable phone/address/hours source is ignored | Med | `check_website` |
 
 ---
 
@@ -99,7 +160,11 @@ assume earlier ones landed.
 
 ---
 
-### - [ ] T1 — Extract all scoring weights into one declarative table
+### - [x] T1 — Extract all scoring weights into one declarative table
+> Done: added module-level `SCORING` dict; `qualify_lead` now reads every weight
+> from it. Pure refactor — verified identical scores (collapsed the two duplicate
+> hiring-fallback branches).
+
 **Prompt:** In `local-biz-92562.py`, add a single module-level dict named
 `SCORING` near the other top-level constants (after `REVIEW_COMPLAINT_KEYWORDS`,
 ~line 142). Move every magic number currently inside `qualify_lead` (~line 517)
@@ -264,6 +329,117 @@ framing as the headline metric (keep it as a sub-input). Reference `PRD.md` §2 
 the source of truth for weights.
 **Acceptance:** README no longer claims website score is the primary ranking;
 pillars and tiers match `SCORING` in code.
+
+---
+
+### Reliability tasks (T13–T18) — the anti-hallucination layer
+
+> **Sequencing:** T13 is the single highest-leverage change in this whole PRD —
+> do it immediately after T1 (the weight-table refactor), before/around T2.
+> T14–T18 reduce the false negatives that make the confidence gate over-quarantine.
+
+### - [x] T13 — Confidence-gate all positive scoring (fixes F1, F13, F14, F15)
+> Done: `qualify_lead` computes `verified = status=="up" and confidence=="high"`.
+> Automation + digital pillars and the growth trade-prior now require `verified`;
+> hiring/review signals stay exempt. Down/blocked/unknown with no external signal
+> → score 0, Cold. Verified: a bare down site scores 0; unverified+hiring+review
+> still scores on those signals only.
+
+
+**Prompt:** In `qualify_lead` (~line 517), award positive points **only** when the
+evidence was actually observed. At the top, compute
+`verified = sq.get("status") == "up" and sq.get("confidence") == "high"`. Gate the
+site-derived pillars (digital footing, any gap-based points) behind `verified`.
+Signals from structured/external sources — `biz.get("hiring_role_match")`,
+`biz.get("review_negative")`, JSON-LD-sourced phone/email — are exempt (they don't
+depend on a clean homepage fetch). If not `verified`, the site contributes **0**,
+and the lead may only reach Hot/Warm on exempt signals + contactability. Append a
+reason "site unverified — scored on external signals only" when applicable.
+**Acceptance:** A business with `status in ("down","blocked")` and no external
+signal scores 0 and lands in Unverified; the `confidence` field now affects output.
+
+### - [x] T14 — Distinguish "unreachable" from "down"; stop confident mislabeling (fixes F14, F15)
+> Done: timeout/TLS/generic and 4xx/5xx now return `("unknown","low")` instead of
+> `("down","high")`/`("blocked",…)`. `"down"` is reserved for a connected-but-dead
+> page. Report shows a `● UNVERIFIED` badge (no more `UP -1/5`); the signal loop
+> now includes `unknown` leads so they can still earn external signals. Verified:
+> an unreachable domain → `unknown/low`, scores 0/Cold.
+
+
+**Prompt:** In `check_website` (~line 345), change the failure paths so a timeout,
+TLS error, or generic exception returns `_base_result("unknown", "low",
+["unreachable — couldn't connect"])` — NOT `("down","high")`. Reserve
+`status="down"` for cases where we *connected* and got a clearly dead/parked page.
+Change the `400/500` branch (~426) to `("unknown","low", [f"HTTP {e.code} — can't
+verify"])`. Add `"unknown"` as a recognized status everywhere it's checked
+(`qualify_lead`, the report buckets). Keep `_base_result` defaulting safely.
+**Acceptance:** A host that times out reports `status="unknown"`, confidence
+`"low"`; no error path returns `"high"` confidence.
+
+### - [x] T15 — Read enough to be honest: deeper fetch + contact/about + www fallback (fixes F16)
+> Done: split fetching into `_fetch_html` (UA exhaustion, 20s timeout, one backoff
+> retry, 150KB budget) + `_absolutize`. `check_website` now tries https/www/non-www
+> candidates, then pulls up to 2 `/contact`+`/about` subpages (≤4 fetches total) and
+> scans the full combined text for phones/contact. Verified: live fetch up/high;
+> unreachable → unknown/low.
+
+
+**Prompt:** In `check_website`, raise the page read budget from 12 KB to 150 KB
+(`[:150000]`) and the phone scan from 5 KB to the full fetched text; raise
+`timeout` to 20 s and add one retry with a 3 s backoff. After fetching the
+homepage, if no phone/contact found, fetch up to two internal links whose href
+contains `contact` or `about` (same domain only, absolutize relative URLs) and
+merge their findings. Try both `domain` and `www.{domain}` (and strip a leading
+`www.` if present) before concluding. Keep total requests per business bounded
+(≤4) to respect runtime.
+**Acceptance:** A site with its phone only in the footer or on `/contact` is now
+found; "no contact page" no longer fires when a `/contact` link exists.
+
+### - [x] T16 — Parse JSON-LD structured data (fixes F18)
+> Done: added `parse_jsonld` (handles arrays + `@graph`, skips malformed blocks).
+> `check_website` merges JSON-LD `telephone` (normalized via `extract_phones`) and
+> `email` into the result and surfaces `sameAs` socials. Verified: a phone present
+> only in JSON-LD is returned; a broken block doesn't crash.
+
+
+**Prompt:** Add a helper `parse_jsonld(html)` that finds every
+`<script type="application/ld+json">…</script>` block, `json.loads` each (wrap in
+try/except; some are arrays or `@graph`), and extracts from any `LocalBusiness`/
+`Organization` node: `telephone`, `email`, `address`, `openingHours`, and
+`sameAs` (social URLs). In `check_website`, call it and merge results into
+`phones`/`emails` with high confidence (structured data is authoritative). Surface
+`sameAs` socials in the result dict for display. Pure stdlib (`json`, `re`).
+**Acceptance:** A page whose phone appears only in JSON-LD returns that phone;
+malformed JSON-LD is skipped without crashing.
+
+### - [x] T17 — Detect JS shells + exhaust UAs before "blocked" (fixes F17)
+> Done: tiny readable text (<200 words) + an SPA bootstrap marker (id="root",
+> __NEXT_DATA__, data-reactroot, ng-version, etc.) → `("unknown","low")` instead of
+> "thin content". UA exhaustion landed with `_fetch_html` (T15): a 403 from one UA
+> tries the rest before declaring "blocked". Verified: React shell → unknown; real
+> content page → up.
+
+
+**Prompt:** In `check_website`: (a) after reading HTML, if the visible text is tiny
+(<200 words) **and** the page contains a shell marker (`id="root"`, `__NEXT_DATA__`,
+`data-reactroot`, `ng-version`, or a Wix/Squarespace app bootstrap), return
+`("unknown","low", ["JS-rendered — couldn't read content"])` instead of "thin
+content"/"down". (b) On a `403/401/429`, do **not** return immediately — `continue`
+to the next UA and scheme, and only return `("blocked","low", …)` after all
+UA×scheme attempts are exhausted.
+**Acceptance:** A React/Next shell reports `status="unknown"`, not "thin content";
+a site that 403s the first UA but serves a later one is read successfully.
+
+### - [ ] T18 — Corroboration gate for soft signals (supports F3, reliability)
+**Prompt:** Add a small helper `corroborated(observations)` that returns True only
+when a soft signal (manual-process tells, generic negative reviews) is supported by
+≥2 independent sources (e.g., complaint seen in 2+ review results) OR comes from a
+structured source. Apply it in `qualify_lead` so Tier-3 manual-process points and
+generic negative-review points require corroboration; Tier-1 job postings and
+JSON-LD facts are exempt (already authoritative). Add a one-line comment citing
+PRD §2b rule 7.
+**Acceptance:** A one-off complaint mention no longer earns points; a complaint
+echoed across 2+ review results does.
 
 ---
 

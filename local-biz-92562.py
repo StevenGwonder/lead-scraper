@@ -151,6 +151,54 @@ NAME_SUFFIXES = [
     " - Threads", " | Threads", " - Reddit", " | Reddit",
 ]
 
+# ── SCORING MODEL ──────────────────────────────────────────────────────
+# Edit the ICP philosophy here — see PRD.md §2. (T1) Weights extracted from
+# qualify_lead verbatim; later tasks rebalance the values, not their location.
+SCORING = {
+    "automation": {
+        "max": 40,
+        "status_down": 25,
+        "status_blocked": 10,
+        "gap_weights": {
+            "no CRM": 15,
+            "no marketing tools": 10,
+            "no analytics": 5,
+            "no booking/chat system": 8,
+            "no booking system": 8,
+        },
+        "gap_default": 5,
+    },
+    "growth": {
+        "max": 30,
+        "hiring_signal": 15,
+        "trade_admin": 15,      # ADMIN_TRADES
+        "trade_high": 15,       # HVAC, Plumbing
+        "trade_moderate": 10,   # Electrical, Roofing, Auto Repair
+        "trade_other": 5,
+        "review_negative": 10,
+    },
+    "digital": {
+        "max": 15,
+        "down": 15,
+        "blocked": 8,
+        "ws_low": 12,           # website_score <= 1
+        "ws_2": 8,
+        "ws_3": 4,
+        "outdated_email": 5,
+        "fax": 5,
+    },
+    "contact": {
+        "max": 15,
+        "phone": 10,
+        "email": 5,
+        "own_site": 3,
+        "snippet": 2,
+    },
+    "trades_high": ("HVAC", "Plumbing"),
+    "trades_moderate": ("Electrical", "Roofing", "Auto Repair"),
+    "tiers": {"hot": 70, "warm": 40},
+}
+
 
 def log(msg):
     print(f"[local-biz] {msg}", file=sys.stderr)
@@ -295,6 +343,18 @@ USER_AGENTS = [
     "Mozilla/5.0 (iPhone; CPU iPhone OS 17_2 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.2 Mobile/15E148 Safari/604.1",
 ]
 
+# T15/T17: deeper, honester fetching
+FETCH_TIMEOUT = 20            # seconds per request (was 12 — slow small-biz hosts)
+FETCH_BUDGET = 150000        # bytes read per page (was 12000 — phones live in footers)
+MAX_FETCHES = 4              # distinct URL fetches per business (candidates + subpages)
+MAX_SUBPAGE_FETCHES = 2      # how many /contact + /about pages to pull in
+# T17: SPA bootstrap markers. A near-empty page carrying one of these is a
+# JS-rendered shell we couldn't read — UNKNOWN, not a thin/dead site.
+JS_SHELL_MARKERS = (
+    'id="root"', "id='root'", "__next_data__", "data-reactroot", "ng-version",
+    'id="__nuxt"', 'id="app"', "data-react-helmet", "data-server-rendered",
+)
+
 
 def _detect_markers(html_lower, marker_dict):
     """Helper: detect which named tools are present in lowercased HTML. Returns list of names found."""
@@ -331,6 +391,61 @@ def _extract_emails(html):
     return emails[:5]
 
 
+def parse_jsonld(html):
+    """T16: Extract authoritative contact facts from schema.org JSON-LD blocks
+    (`<script type="application/ld+json">`). Far more reliable than regex on
+    rendered text. Best-effort and never raises — malformed blocks are skipped.
+    Returns {"phones","emails","socials","address","hours"}."""
+    out = {"phones": [], "emails": [], "socials": [], "address": "", "hours": []}
+    blocks = re.findall(
+        r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>',
+        html, re.I | re.S)
+    nodes = []
+
+    def collect(d):
+        if isinstance(d, list):
+            for x in d:
+                collect(x)
+        elif isinstance(d, dict):
+            if "@graph" in d:
+                collect(d["@graph"])
+            nodes.append(d)
+
+    for blk in blocks:
+        try:
+            collect(json.loads(blk.strip()))
+        except Exception:
+            continue  # malformed JSON-LD — skip, don't crash
+
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        tel = node.get("telephone")
+        if isinstance(tel, str):
+            out["phones"].append(tel)
+        em = node.get("email")
+        if isinstance(em, str):
+            out["emails"].append(em.replace("mailto:", "").strip().lower())
+        same = node.get("sameAs")
+        if isinstance(same, str):
+            out["socials"].append(same)
+        elif isinstance(same, list):
+            out["socials"] += [s for s in same if isinstance(s, str)]
+        addr = node.get("address")
+        if isinstance(addr, dict):
+            parts = [addr.get(k, "") for k in
+                     ("streetAddress", "addressLocality", "addressRegion", "postalCode")]
+            out["address"] = out["address"] or ", ".join(p for p in parts if p)
+        elif isinstance(addr, str):
+            out["address"] = out["address"] or addr
+        hrs = node.get("openingHours")
+        if isinstance(hrs, str):
+            out["hours"].append(hrs)
+        elif isinstance(hrs, list):
+            out["hours"] += [h for h in hrs if isinstance(h, str)]
+    return out
+
+
 def _base_result(status, confidence, gaps):
     """Base result dict for check_website — avoids repeating 13 keys 4 times."""
     return {"status": status, "confidence": confidence,
@@ -339,94 +454,196 @@ def _base_result(status, confidence, gaps):
             "words": 0, "phones": [],
             "has_crm": [], "has_analytics": [], "has_marketing_tools": [],
             "has_booking_system": [], "emails": [],
-            "has_outdated_email": False, "has_fax": False}
+            "has_outdated_email": False, "has_fax": False, "socials": []}
 
 
-def check_website(domain):
-    """Phase 1+2+3: Robust website check with SSL fallback, multi-UA, honest status."""
-    for scheme in ["https", "http"]:
+def _absolutize(href, base_url, base_domain):
+    """Resolve an href to a same-domain absolute URL, or None if off-site/non-http."""
+    href = href.strip()
+    if not href or href[0] == "#" or href.lower().startswith(("mailto:", "tel:", "javascript:")):
+        return None
+    if href.startswith("//"):
+        return None
+    if href.lower().startswith(("http://", "https://")):
+        host = re.sub(r'https?://(www\.)?', '', href.lower()).split('/')[0]
+        return href if base_domain in host else None
+    return urllib.parse.urljoin(base_url, href)
+
+
+def _fetch_html(url, timeout=FETCH_TIMEOUT, retries=1):
+    """Fetch one URL, rotating ALL user-agents before giving up (so a single 403
+    from the first UA doesn't declare the whole site blocked). One backoff retry
+    on transient failure. Returns {"ok":True,"html","final_url"} or
+    {"ok":False,"reason":"blocked"|"http"|"unreachable","code":...}."""
+    blocked = False
+    http_code = None
+    for attempt in range(retries + 1):
         for ua in USER_AGENTS:
             try:
                 req = urllib.request.Request(
-                    f"{scheme}://{domain}",
-                    headers={"User-Agent": ua, "Accept": "text/html,application/xhtml+xml"}
-                )
-                with urllib.request.urlopen(req, timeout=12, context=_NOVERIFY_CTX) as resp:
-                    html = resp.read().decode("utf-8", errors="ignore")[:12000]
-                    html_lower = html.lower()
-
-                    if "cf-browser-verification" in html_lower or "checking your browser" in html_lower or "cf-challenge" in html_lower:
-                        return _base_result("blocked", "low", ["bot-protected — can't verify"])
-
-                    if len(html_lower) < 200:
-                        continue
-
-                    gaps = []
-                    platform = "Custom"
-                    for marker, name in PLATFORMS.items():
-                        if marker in html_lower:
-                            platform = name
-                    if "elementor" in html_lower and "wordpress" in platform.lower():
-                        platform = "WordPress/Elementor"
-
-                    crm_tools = _detect_markers(html_lower, CRM_MARKERS)
-                    analytics_tools = _detect_markers(html_lower, ANALYTICS_MARKERS)
-                    marketing_tools = _detect_markers(html_lower, MARKETING_MARKERS)
-                    booking_tools = _detect_markers(html_lower, BOOKING_MARKERS)
-                    emails = _extract_emails(html)
-                    has_outdated_email = any(any(od in addr for od in OUTDATED_EMAIL_DOMAINS) for addr in emails)
-                    has_fax = bool(re.search(r'fax[\s:.]*[\(\d]{1,2}[\d\s\-\.\/\(\)]{10,}', html_lower))
-
-                    has_viewport = "viewport" in html_lower
-                    has_tel = "tel:" in html_lower
-                    has_contact = "contact" in html_lower
-                    has_booking_system = bool(booking_tools)
-                    has_chat = any(x in html_lower for x in ["chat", "intercom", "tawk", "drift", "olark"])
-
-                    if not has_booking_system and not has_chat:
-                        gaps.append("no booking/chat system")
-                    elif not has_booking_system:
-                        gaps.append("no booking system")
-                    if not has_tel: gaps.append("no click-to-call")
-                    if not has_contact: gaps.append("no contact page")
-                    if not has_viewport: gaps.append("not mobile-responsive")
-                    if not crm_tools: gaps.append("no CRM")
-                    if not marketing_tools: gaps.append("no marketing tools")
-                    if not analytics_tools: gaps.append("no analytics")
-
-                    text = re.sub(r'<[^>]+>', ' ', html_lower)
-                    words = len(text.split())
-                    if words < 200:
-                        gaps.append(f"thin content ({words}w)")
-
-                    website_score = sum([has_viewport, has_tel, has_contact, words > 200, has_booking_system or has_chat])
-
-                    page_phones = extract_phones(html[:5000])
-                    tel_matches = re.findall(r'href=["\']tel:([+\d\s()\-\.]+)', html, re.I)
-                    for tm in tel_matches:
-                        digits = re.sub(r'\D', '', tm)
-                        if len(digits) == 10:
-                            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-                            if formatted not in page_phones:
-                                page_phones.append(formatted)
-
-                    return {"status": "up", "confidence": "high",
-                            "website_score": website_score, "automation_gaps": gaps,
-                            "platform": platform, "words": words, "phones": page_phones,
-                            "has_crm": crm_tools, "has_analytics": analytics_tools,
-                            "has_marketing_tools": marketing_tools,
-                            "has_booking_system": booking_tools, "emails": emails,
-                            "has_outdated_email": has_outdated_email, "has_fax": has_fax}
-
+                    url, headers={"User-Agent": ua, "Accept": "text/html,application/xhtml+xml"})
+                with urllib.request.urlopen(req, timeout=timeout, context=_NOVERIFY_CTX) as resp:
+                    html = resp.read().decode("utf-8", errors="ignore")[:FETCH_BUDGET]
+                    return {"ok": True, "html": html, "final_url": resp.geturl()}
             except urllib.error.HTTPError as e:
                 if e.code in (403, 401, 429):
-                    return _base_result("blocked", "low", ["bot-protected — can't verify"])
-                if e.code == 404:
+                    blocked = True       # try the other UAs before concluding "blocked"
                     continue
-                return _base_result("blocked", "low", [f"HTTP {e.code} — can't verify"])
+                http_code = e.code       # 404 / 5xx — try next UA too
+                continue
             except (urllib.error.URLError, Exception):
                 continue
-    return _base_result("down", "high", ["site down"])
+        if attempt < retries:
+            time.sleep(3)
+    if blocked:
+        return {"ok": False, "reason": "blocked", "code": 403}
+    if http_code:
+        return {"ok": False, "reason": "http", "code": http_code}
+    return {"ok": False, "reason": "unreachable", "code": None}
+
+
+def check_website(domain):
+    """Robust, honest website check. Deep read (150KB), 20s timeout + retry,
+    www/non-www fallback, and a /contact + /about crawl to fill phone/contact gaps
+    so we stop reporting false "no phone / no contact" on pages that are fine.
+    Failed fetches return UNKNOWN, never confident "down" (see T13/T14)."""
+    base = domain[4:] if domain.lower().startswith("www.") else domain
+    candidates = [f"https://{base}", f"https://www.{base}", f"http://{base}"]
+
+    page = None
+    blocked = False
+    http_err = None
+    fetches = 0
+    for i, url in enumerate(candidates):
+        if fetches >= MAX_FETCHES:
+            break
+        fetches += 1
+        res = _fetch_html(url, retries=1 if i == 0 else 0)
+        if res["ok"]:
+            page = res
+            break
+        if res["reason"] == "blocked":
+            blocked = True
+        elif res["reason"] == "http":
+            http_err = res.get("code")
+
+    if page is None:
+        if blocked:
+            return _base_result("blocked", "low", ["bot-protected — can't verify"])
+        if http_err:
+            return _base_result("unknown", "low", [f"HTTP {http_err} — can't verify"])
+        return _base_result("unknown", "low", ["unreachable — couldn't connect"])
+
+    html = page["html"]
+    html_lower = html.lower()
+
+    if any(m in html_lower for m in ("cf-browser-verification", "checking your browser", "cf-challenge")):
+        return _base_result("blocked", "low", ["bot-protected — can't verify"])
+
+    # Near-empty page we *connected* to = genuinely dead/parked (T14 reserves "down").
+    if len(html_lower) < 200:
+        return _base_result("down", "low", ["near-empty page"])
+
+    # T17: JS-rendered shell — lots of <script>, almost no readable text, plus an
+    # SPA bootstrap marker → we couldn't read it. UNKNOWN, never "thin content".
+    text = re.sub(r'<[^>]+>', ' ', html_lower)
+    words = len(text.split())
+    if words < 200 and any(mk in html_lower for mk in JS_SHELL_MARKERS):
+        return _base_result("unknown", "low", ["JS-rendered — couldn't read content"])
+
+    # ── platform + tools (homepage only) ──
+    platform = "Custom"
+    for marker, name in PLATFORMS.items():
+        if marker in html_lower:
+            platform = name
+    if "elementor" in html_lower and "wordpress" in platform.lower():
+        platform = "WordPress/Elementor"
+
+    crm_tools = _detect_markers(html_lower, CRM_MARKERS)
+    analytics_tools = _detect_markers(html_lower, ANALYTICS_MARKERS)
+    marketing_tools = _detect_markers(html_lower, MARKETING_MARKERS)
+    booking_tools = _detect_markers(html_lower, BOOKING_MARKERS)
+
+    # ── T15: pull in /contact and /about to fill contact/phone gaps ──
+    combined = html
+    sub_links = []
+    for href in re.findall(r'href=["\']([^"\']+)["\']', html, re.I):
+        if any(k in href.lower() for k in ("contact", "about")):
+            full = _absolutize(href, page["final_url"], base)
+            if full and full not in sub_links:
+                sub_links.append(full)
+        if len(sub_links) >= MAX_SUBPAGE_FETCHES:
+            break
+    for link in sub_links:
+        if fetches >= MAX_FETCHES:
+            break
+        fetches += 1
+        sub = _fetch_html(link, retries=0)
+        if sub["ok"]:
+            combined += "\n" + sub["html"]
+    combined_lower = combined.lower()
+
+    # ── T16: schema.org JSON-LD is authoritative — merge its contact facts ──
+    jl = parse_jsonld(combined)
+    socials = []
+    for s in jl["socials"]:
+        if s not in socials:
+            socials.append(s)
+
+    # ── signals (combined homepage + subpages) ──
+    emails = _extract_emails(combined)
+    for e in jl["emails"]:
+        e = e.strip().lower()
+        if "@" in e and len(e) < 80 and e not in emails:
+            emails.append(e)
+    has_fax = bool(re.search(r'fax[\s:.]*[\(\d]{1,2}[\d\s\-\.\/\(\)]{10,}', combined_lower))
+
+    has_viewport = "viewport" in html_lower
+    has_tel = "tel:" in combined_lower
+    has_contact = ("contact" in combined_lower) or bool(sub_links)
+    has_booking_system = bool(booking_tools)
+    has_chat = any(x in html_lower for x in ["chat", "intercom", "tawk", "drift", "olark"])
+
+    gaps = []
+    if not has_booking_system and not has_chat:
+        gaps.append("no booking/chat system")
+    elif not has_booking_system:
+        gaps.append("no booking system")
+    if not has_tel: gaps.append("no click-to-call")
+    if not has_contact: gaps.append("no contact page")
+    if not has_viewport: gaps.append("not mobile-responsive")
+    if not crm_tools: gaps.append("no CRM")
+    if not marketing_tools: gaps.append("no marketing tools")
+    if not analytics_tools: gaps.append("no analytics")
+
+    if words < 200:
+        gaps.append(f"thin content ({words}w)")
+
+    website_score = sum([has_viewport, has_tel, has_contact, words > 200, has_booking_system or has_chat])
+
+    page_phones = extract_phones(combined)
+    for tm in re.findall(r'href=["\']tel:([+\d\s()\-\.]+)', combined, re.I):
+        digits = re.sub(r'\D', '', tm)
+        if len(digits) == 10:
+            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+            if formatted not in page_phones:
+                page_phones.append(formatted)
+    # T16: JSON-LD telephone is authoritative — normalize and merge
+    for t in jl["phones"]:
+        for formatted in extract_phones(t):
+            if formatted not in page_phones:
+                page_phones.append(formatted)
+
+    has_outdated_email = any(any(od in addr for od in OUTDATED_EMAIL_DOMAINS) for addr in emails)
+
+    return {"status": "up", "confidence": "high",
+            "website_score": website_score, "automation_gaps": gaps,
+            "platform": platform, "words": words, "phones": page_phones,
+            "has_crm": crm_tools, "has_analytics": analytics_tools,
+            "has_marketing_tools": marketing_tools,
+            "has_booking_system": booking_tools, "emails": emails[:5],
+            "has_outdated_email": has_outdated_email, "has_fax": has_fax,
+            "socials": socials[:6]}
 
 
 def search_hiring_signals(biz_name, cache_key, cache):
@@ -531,134 +748,112 @@ def qualify_lead(biz, sq):
     breakdown = {}
     reasons = []
 
-    # ── AUTOMATION READINESS (0-40) ──
-    ar = 0
+    A = SCORING["automation"]
+    G = SCORING["growth"]
+    D = SCORING["digital"]
+    C = SCORING["contact"]
+
     gaps = sq.get("automation_gaps", sq.get("issues", []))
     status = sq.get("status", "unknown")
+    # T13 — confidence gate: only score what we actually observed. A site we
+    # couldn't read (down / blocked / unknown / JS-shell) earns ZERO from the
+    # site-derived pillars; we never reward our own fetch failure as opportunity.
+    # External signals (hiring, reviews, JSON-LD contacts) are exempt below.
+    verified = status == "up" and sq.get("confidence") == "high"
 
-    if status == "down":
-        ar += 25  # No website at all = massive opportunity
-        reasons.append("no working website (+25)")
-    elif status == "blocked":
-        ar += 10  # Can't verify = unknown opportunity, moderate
-        reasons.append("site bot-protected, gaps unknown (+10)")
-    else:
-        # Phase 2: refined gap-based scoring
-        # no CRM detected = +15 (huge automation opportunity)
-        # no marketing tools = +10
-        # no analytics = +5
-        # other gaps (no booking system, no click-to-call, no contact page, not mobile-responsive, thin content) = +5 each
-        gap_weights = {
-            "no CRM": 15,
-            "no marketing tools": 10,
-            "no analytics": 5,
-            "no booking/chat system": 8,
-            "no booking system": 8,
-        }
+    # ── AUTOMATION READINESS (site-derived → gated) ──
+    ar = 0
+    if verified:
         for g in gaps:
-            weight = gap_weights.get(g, 5)
+            weight = A["gap_weights"].get(g, A["gap_default"])
             ar += weight
             reasons.append(f"{g} (+{weight})")
-        ar = min(ar, 40)
+        ar = min(ar, A["max"])
 
-    breakdown["automation"] = min(ar, 40)
+    breakdown["automation"] = min(ar, A["max"])
 
-    # ── GROWTH SIGNALS (0-30) ──
+    # ── GROWTH SIGNALS ──
     growth = 0
     trade = biz.get("trade", "")
-    
-    # Phase 2: Hiring signals from SearXNG search (stored in biz)
+
+    # Hiring signals from SearXNG search (stored in biz)
     hiring_signals = biz.get("hiring_signals", [])
     if hiring_signals:
-        growth += 15
-        reasons.append("hiring signal detected (+15)")
-    elif biz.get("hiring_checked"):
-        # Was checked but no hiring signals — use trade-based fallback
+        growth += G["hiring_signal"]
+        reasons.append(f"hiring signal detected (+{G['hiring_signal']})")
+    elif verified:
+        # Trade prior is a guess about a live business — only apply it when we
+        # could confirm the site is actually up (T13). No verification → no
+        # manufactured growth points from a business we couldn't read.
         if trade in ADMIN_TRADES:
-            growth += 15
-            reasons.append("admin/ops business — high automation demand (+15)")
-        elif trade in ("HVAC", "Plumbing"):
-            growth += 15
-            reasons.append("high-demand trade for automation (+15)")
-        elif trade in ("Electrical", "Roofing", "Auto Repair"):
-            growth += 10
-            reasons.append("moderate-demand trade (+10)")
+            growth += G["trade_admin"]
+            reasons.append(f"admin/ops business — high automation demand (+{G['trade_admin']})")
+        elif trade in SCORING["trades_high"]:
+            growth += G["trade_high"]
+            reasons.append(f"high-demand trade for automation (+{G['trade_high']})")
+        elif trade in SCORING["trades_moderate"]:
+            growth += G["trade_moderate"]
+            reasons.append(f"moderate-demand trade (+{G['trade_moderate']})")
         else:
-            growth += 5
-    else:
-        # Not yet checked — use trade-based proxy as before
-        if trade in ADMIN_TRADES:
-            growth += 15
-            reasons.append("admin/ops business — high automation demand (+15)")
-        elif trade in ("HVAC", "Plumbing"):
-            growth += 15
-            reasons.append("high-demand trade for automation (+15)")
-        elif trade in ("Electrical", "Roofing", "Auto Repair"):
-            growth += 10
-            reasons.append("moderate-demand trade (+10)")
-        else:
-            growth += 5
+            growth += G["trade_other"]
 
-    # Phase 2: Negative review signals = business is losing customers (buying signal)
+    # Negative review signals = business is losing customers (buying signal)
     if biz.get("review_negative"):
-        growth += 10
-        reasons.append("negative reviews — losing customers (+10)")
-    
-    breakdown["growth"] = min(growth, 30)
+        growth += G["review_negative"]
+        reasons.append(f"negative reviews — losing customers (+{G['review_negative']})")
 
-    # ── DIGITAL GAP (0-15) ──
+    breakdown["growth"] = min(growth, G["max"])
+
+    # ── DIGITAL GAP (site-derived → gated) ──
     dg = 0
-    ws = sq.get("website_score", -1)
-    if ws == -1:
-        if status == "down":
-            dg += 15  # No website = biggest digital gap
-            reasons.append("completely invisible online (+15)")
-        elif status == "blocked":
-            dg += 8  # Unknown
-    elif ws <= 1:
-        dg += 12
-        reasons.append(f"website score {ws}/5 — major digital gap (+12)")
-    elif ws == 2:
-        dg += 8
-        reasons.append(f"website score 2/5 — clear gaps (+8)")
-    elif ws == 3:
-        dg += 4
-        reasons.append(f"website score 3/5 — some gaps (+4)")
-    # Score 4-5 = no gap, +0
+    if verified:
+        ws = sq.get("website_score", -1)
+        if ws <= 1:
+            dg += D["ws_low"]
+            reasons.append(f"website score {ws}/5 — major digital gap (+{D['ws_low']})")
+        elif ws == 2:
+            dg += D["ws_2"]
+            reasons.append(f"website score 2/5 — clear gaps (+{D['ws_2']})")
+        elif ws == 3:
+            dg += D["ws_3"]
+            reasons.append(f"website score 3/5 — some gaps (+{D['ws_3']})")
+        # Score 4-5 = no gap, +0
 
-    # Phase 3: Digital laggard signals
-    if sq.get("has_outdated_email"):
-        dg += 5
-        reasons.append("outdated email provider (digital laggard) (+5)")
-    if sq.get("has_fax"):
-        dg += 5
-        reasons.append("fax number — paper-based operation (+5)")
+        # Digital laggard signals (read from the site we just verified)
+        if sq.get("has_outdated_email"):
+            dg += D["outdated_email"]
+            reasons.append(f"outdated email provider (digital laggard) (+{D['outdated_email']})")
+        if sq.get("has_fax"):
+            dg += D["fax"]
+            reasons.append(f"fax number — paper-based operation (+{D['fax']})")
 
-    breakdown["digital"] = min(dg, 15)
+    breakdown["digital"] = min(dg, D["max"])
 
-    # ── CONTACTABILITY (0-15) ──
+    # ── CONTACTABILITY ──
     contact = 0
     phones = biz.get("phones", [])
     if phones:
-        contact += 10
-        reasons.append("phone found (+10)")
-    # Phase 3: Email found = +5
+        contact += C["phone"]
+        reasons.append(f"phone found (+{C['phone']})")
     emails = biz.get("emails", []) or sq.get("emails", [])
     if emails:
-        contact += 5
-        reasons.append(f"email found (+5)")
+        contact += C["email"]
+        reasons.append(f"email found (+{C['email']})")
     if biz.get("has_own_site"):
-        contact += 3  # Has a website = can find contact page
+        contact += C["own_site"]  # Has a website = can find contact page
     if biz.get("snippet") and len(biz.get("snippet", "")) > 50:
-        contact += 2  # Has a description = more info to work with
-    breakdown["contact"] = min(contact, 15)
+        contact += C["snippet"]  # Has a description = more info to work with
+    breakdown["contact"] = min(contact, C["max"])
+
+    if not verified:
+        reasons.append("site unverified — scored on external signals only")
 
     # ── TOTAL ──
     total = breakdown["automation"] + breakdown["growth"] + breakdown["digital"] + breakdown["contact"]
 
-    if total >= 70:
+    if total >= SCORING["tiers"]["hot"]:
         tier = "Hot"
-    elif total >= 40:
+    elif total >= SCORING["tiers"]["warm"]:
         tier = "Warm"
     else:
         tier = "Cold"
@@ -993,8 +1188,11 @@ def generate_html_report(cache, zip_code="92562"):
             html += '<span class="lead-status status-down">● DOWN</span>'
         elif status == "blocked":
             html += '<span class="lead-status status-blocked">● BLOCKED</span>'
-        else:
+        elif status == "up":
             html += f'<span class="lead-status status-up">● UP {ws}/5</span>'
+        else:
+            # T14: unknown / unreachable — couldn't read, so don't claim "UP -1/5"
+            html += '<span class="lead-status status-blocked">● UNVERIFIED</span>'
         html += '</div>'
 
         # Qualification reasons (why this lead is qualified)
@@ -1261,7 +1459,9 @@ def main():
     scored_leads = []
     for norm, biz in cache["businesses"].items():
         sq = biz.get("site_quality")
-        if not sq or sq.get("status") not in ("up", "blocked", "down"):
+        # T14: include "unknown" (unreachable) — those leads can ONLY be scored on
+        # external signals, so they need the hiring/review search the most.
+        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
             continue
         if biz.get("hiring_checked") and biz.get("review_checked"):
             continue  # Already checked both
