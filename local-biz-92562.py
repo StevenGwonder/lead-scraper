@@ -987,7 +987,7 @@ def backup_cache(cache):
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M")
     backup = REPORT_DIR / f"cache-backup-{ts}.json"
-    with open(backup, "w") as f:
+    with open(backup, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2)
     # Keep only the last 10 backups
     backups = sorted(REPORT_DIR.glob("cache-backup-*.json"))
@@ -1456,9 +1456,10 @@ def send_report(cache, zip_code, now, prev_run=None):
     html = generate_html_report(cache, zip_code, prev_run=prev_run)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"scout-report-{now.strftime('%Y%m%d_%H%M')}.html"
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(html)
-    hermes = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    _h = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    hermes = _h if os.path.isfile(_h) else None
     if hermes:
         subprocess.run([hermes, "send", "-t", "telegram:-5131689526",
             f"Lead Scout Report — {now.strftime('%b %d, %H:%M')} PT\nMEDIA:{report_path}"],
