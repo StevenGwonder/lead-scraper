@@ -584,18 +584,17 @@ def qualify_lead(biz, sq):
     D = SCORING["digital"]
     C = SCORING["contact"]
 
-    # ── AUTOMATION READINESS ──
-    ar = 0
     gaps = sq.get("automation_gaps", sq.get("issues", []))
     status = sq.get("status", "unknown")
+    # T13 — confidence gate: only score what we actually observed. A site we
+    # couldn't read (down / blocked / unknown / JS-shell) earns ZERO from the
+    # site-derived pillars; we never reward our own fetch failure as opportunity.
+    # External signals (hiring, reviews, JSON-LD contacts) are exempt below.
+    verified = status == "up" and sq.get("confidence") == "high"
 
-    if status == "down":
-        ar += A["status_down"]  # No website at all = massive opportunity
-        reasons.append(f"no working website (+{A['status_down']})")
-    elif status == "blocked":
-        ar += A["status_blocked"]  # Can't verify = unknown opportunity, moderate
-        reasons.append(f"site bot-protected, gaps unknown (+{A['status_blocked']})")
-    else:
+    # ── AUTOMATION READINESS (site-derived → gated) ──
+    ar = 0
+    if verified:
         for g in gaps:
             weight = A["gap_weights"].get(g, A["gap_default"])
             ar += weight
@@ -613,9 +612,10 @@ def qualify_lead(biz, sq):
     if hiring_signals:
         growth += G["hiring_signal"]
         reasons.append(f"hiring signal detected (+{G['hiring_signal']})")
-    else:
-        # Trade-based proxy — identical whether hiring was checked-but-empty
-        # or not yet checked (the two old branches were duplicate code).
+    elif verified:
+        # Trade prior is a guess about a live business — only apply it when we
+        # could confirm the site is actually up (T13). No verification → no
+        # manufactured growth points from a business we couldn't read.
         if trade in ADMIN_TRADES:
             growth += G["trade_admin"]
             reasons.append(f"admin/ops business — high automation demand (+{G['trade_admin']})")
@@ -635,33 +635,28 @@ def qualify_lead(biz, sq):
 
     breakdown["growth"] = min(growth, G["max"])
 
-    # ── DIGITAL GAP ──
+    # ── DIGITAL GAP (site-derived → gated) ──
     dg = 0
-    ws = sq.get("website_score", -1)
-    if ws == -1:
-        if status == "down":
-            dg += D["down"]  # No website = biggest digital gap
-            reasons.append(f"completely invisible online (+{D['down']})")
-        elif status == "blocked":
-            dg += D["blocked"]  # Unknown
-    elif ws <= 1:
-        dg += D["ws_low"]
-        reasons.append(f"website score {ws}/5 — major digital gap (+{D['ws_low']})")
-    elif ws == 2:
-        dg += D["ws_2"]
-        reasons.append(f"website score 2/5 — clear gaps (+{D['ws_2']})")
-    elif ws == 3:
-        dg += D["ws_3"]
-        reasons.append(f"website score 3/5 — some gaps (+{D['ws_3']})")
-    # Score 4-5 = no gap, +0
+    if verified:
+        ws = sq.get("website_score", -1)
+        if ws <= 1:
+            dg += D["ws_low"]
+            reasons.append(f"website score {ws}/5 — major digital gap (+{D['ws_low']})")
+        elif ws == 2:
+            dg += D["ws_2"]
+            reasons.append(f"website score 2/5 — clear gaps (+{D['ws_2']})")
+        elif ws == 3:
+            dg += D["ws_3"]
+            reasons.append(f"website score 3/5 — some gaps (+{D['ws_3']})")
+        # Score 4-5 = no gap, +0
 
-    # Digital laggard signals
-    if sq.get("has_outdated_email"):
-        dg += D["outdated_email"]
-        reasons.append(f"outdated email provider (digital laggard) (+{D['outdated_email']})")
-    if sq.get("has_fax"):
-        dg += D["fax"]
-        reasons.append(f"fax number — paper-based operation (+{D['fax']})")
+        # Digital laggard signals (read from the site we just verified)
+        if sq.get("has_outdated_email"):
+            dg += D["outdated_email"]
+            reasons.append(f"outdated email provider (digital laggard) (+{D['outdated_email']})")
+        if sq.get("has_fax"):
+            dg += D["fax"]
+            reasons.append(f"fax number — paper-based operation (+{D['fax']})")
 
     breakdown["digital"] = min(dg, D["max"])
 
@@ -680,6 +675,9 @@ def qualify_lead(biz, sq):
     if biz.get("snippet") and len(biz.get("snippet", "")) > 50:
         contact += C["snippet"]  # Has a description = more info to work with
     breakdown["contact"] = min(contact, C["max"])
+
+    if not verified:
+        reasons.append("site unverified — scored on external signals only")
 
     # ── TOTAL ──
     total = breakdown["automation"] + breakdown["growth"] + breakdown["digital"] + breakdown["contact"]

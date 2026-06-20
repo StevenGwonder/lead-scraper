@@ -338,7 +338,14 @@ pillars and tiers match `SCORING` in code.
 > do it immediately after T1 (the weight-table refactor), before/around T2.
 > T14–T18 reduce the false negatives that make the confidence gate over-quarantine.
 
-### - [ ] T13 — Confidence-gate all positive scoring (fixes F1, F13, F14, F15)
+### - [x] T13 — Confidence-gate all positive scoring (fixes F1, F13, F14, F15)
+> Done: `qualify_lead` computes `verified = status=="up" and confidence=="high"`.
+> Automation + digital pillars and the growth trade-prior now require `verified`;
+> hiring/review signals stay exempt. Down/blocked/unknown with no external signal
+> → score 0, Cold. Verified: a bare down site scores 0; unverified+hiring+review
+> still scores on those signals only.
+
+
 **Prompt:** In `qualify_lead` (~line 517), award positive points **only** when the
 evidence was actually observed. At the top, compute
 `verified = sq.get("status") == "up" and sq.get("confidence") == "high"`. Gate the
