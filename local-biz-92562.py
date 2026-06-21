@@ -4,7 +4,7 @@
 
 Scrapes SearXNG for local businesses (trades + admin/ops), audits websites
 for automation gaps, scores buying readiness (0-100), delivers HTML report.
-Ponytail v9: dead code removed, ~1399 lines, zero non-stdlib dependencies.
+Ponytail v9: dead code removed, ~1399 lines.
 """
 import argparse
 import json
@@ -97,6 +97,21 @@ TRADE_GROUPS = [
 ADMIN_TRADES = {"Accounting", "Law Office", "Insurance", "Property Management",
                 "Recruiting", "Consulting"}
 
+# T6: Roles where hiring = "you're about to pay a human to do agent work"
+AUTOMATABLE_ROLES = [
+    "receptionist", "front desk", "scheduler", "scheduling", "intake",
+    "dispatcher", "dispatch", "administrative assistant", "admin assistant",
+    "data entry", "office assistant", "customer service rep",
+    "appointment coordinator", "office manager", "billing coordinator",
+    "accounts receivable", "accounts payable", "bookkeeper",
+]
+# T6: Hiring verbs that prove the page is an actual job posting, not a query echo
+HIRING_VERBS = [
+    "now hiring", "we're hiring", "we are hiring", "join our team",
+    "apply now", "apply today", "open position", "job opening",
+    "career opportunity", "careers at", "work with us",
+]
+
 # Platform detection — ponytail: dict loop replaces 6 inline ifs
 PLATFORMS = {
     "wp-content": "WordPress", "wordpress": "WordPress",
@@ -152,51 +167,39 @@ NAME_SUFFIXES = [
 ]
 
 # ── SCORING MODEL ──────────────────────────────────────────────────────
-# Edit the ICP philosophy here — see PRD.md §2. (T1) Weights extracted from
-# qualify_lead verbatim; later tasks rebalance the values, not their location.
+# Edit the ICP philosophy here — see PRD.md §2.
+# 5-pillar buying-readiness model; max 100. Contactability is a gate, not a scored pillar.
 SCORING = {
-    "automation": {
-        "max": 40,
-        "status_down": 25,
-        "status_blocked": 10,
-        "gap_weights": {
-            "no CRM": 15,
-            "no marketing tools": 10,
-            "no analytics": 5,
-            "no booking/chat system": 8,
-            "no booking system": 8,
-        },
-        "gap_default": 5,
+    "repetitive_work": {        # T3: Does this biz drown in automatable manual work?
+        "max": 35,
+        "admin_ops": 25,                # trade in ADMIN_TRADES (verified site only)
+        "appointment_no_booking": 10,   # appt trade + no booking system (verified)
     },
-    "growth": {
-        "max": 30,
-        "hiring_signal": 15,
-        "trade_admin": 15,      # ADMIN_TRADES
-        "trade_high": 15,       # HVAC, Plumbing
-        "trade_moderate": 10,   # Electrical, Roofing, Auto Repair
-        "trade_other": 5,
-        "review_negative": 10,
+    "named_pain": {             # T5: Have customers stated the exact pain we solve?
+        "max": 25,
+        "review_complaint": 25,         # slow/no-callback/no-response in reviews
     },
-    "digital": {
+    "growth_budget": {          # T5: Can they pay a retainer? Are they straining?
+        "max": 25,
+        "automatable_role": 25,         # hiring receptionist/scheduler/intake/etc.
+        "generic_hiring": 12,           # generic hiring signal
+        "multi_signal": 8,              # 2+ phones OR 2+ domains = operational complexity
+        "trade_admin": 8,               # ADMIN_TRADES prior (verified only)
+        "trade_appt": 5,                # appointment trade prior (verified only)
+    },
+    "digital_footing": {        # T2: Enough maturity to integrate with? Real gaps?
         "max": 15,
-        "down": 15,
-        "blocked": 8,
-        "ws_low": 12,           # website_score <= 1
+        "site_down": 3,                 # T2: cap — down alone can never reach Hot
+        "site_blocked": 5,              # T2: cap — blocked alone can never reach Hot
+        "ws_low": 15,                   # website_score <= 1 (verified site)
         "ws_2": 8,
         "ws_3": 4,
-        "outdated_email": 5,
-        "fax": 5,
+        "outdated_email": 3,
+        "fax": 3,
     },
-    "contact": {
-        "max": 15,
-        "phone": 10,
-        "email": 5,
-        "own_site": 3,
-        "snippet": 2,
-    },
-    "trades_high": ("HVAC", "Plumbing"),
-    "trades_moderate": ("Electrical", "Roofing", "Auto Repair"),
-    "tiers": {"hot": 70, "warm": 40},
+    # Appointment-heavy trades where "no booking system" signals manual drag
+    "appointment_trades": ("HVAC", "Plumbing", "Auto Repair", "Carpet Cleaning", "Handyman"),
+    "tiers": {"hot": 65, "warm": 40},
 }
 
 
@@ -322,7 +325,7 @@ def extract_phones(text):
         if len(digits) == 11 and digits.startswith('1'):
             digits = digits[1:]
         if digits not in seen and len(digits) == 10:
-            # Skip area codes that are clearly not real (000, 800, 888 toll-free often junk)
+            # Skip area codes that are clearly not real (000 = invalid, 999 = test)
             if not digits.startswith(('000', '999')):
                 seen.add(digits)
                 # Normalize format: (XXX) XXX-XXXX
@@ -647,46 +650,57 @@ def check_website(domain):
 
 
 def search_hiring_signals(biz_name, cache_key, cache):
-    """Phase 2: Search SearXNG for hiring signals — '{name} hiring' and '{name} jobs'.
-    Returns True if hiring signals found. Stores results in cache['businesses'][cache_key]['hiring_signals'].
-    Respects 6-second rate limiting between queries."""
+    """T6+T10: Role-aware hiring search. Only flags when a real hiring verb + biz name
+    appear together; sets hiring_role_match=True for AUTOMATABLE_ROLES matches.
+    T10: indeed/ziprecruiter/linkedin job URLs are intentionally allowed here (they're
+    blocked in the crawl loop as 'not real businesses', but they're authoritative signal
+    sources for whether a named business is hiring an automatable role)."""
     if not biz_name or len(biz_name) < 3:
         return False
-    # Check cache first — don't re-search within 3 days
     cached = cache.get("businesses", {}).get(cache_key, {})
     if cached.get("hiring_checked"):
-        cached_hiring = cached.get("hiring_signals", [])
-        return bool(cached_hiring)
-    
+        return bool(cached.get("hiring_signals", []))
+
+    biz_name_lower = biz_name.lower()
+    # Short words (≤4 chars) match too broadly in URL/title fragments — skip name check for them
+    name_words = [w for w in biz_name_lower.split() if len(w) > 4]
+
     hiring_found = False
+    role_match = False
     hiring_results = []
+
     for q in [f"{biz_name} hiring", f"{biz_name} jobs"]:
         results = searx_search(q, limit=6, delay=6)
         for r in results:
             title = (r.get("title", "") or "").lower()
             snippet = (r.get("content", "") or "").lower()
+            url = (r.get("url", "") or "").lower()
             combined = title + " " + snippet
-            # Look for actual hiring indicators (job listings, "we're hiring", "now hiring", career pages)
-            if any(kw in combined for kw in [
-                "hiring", "jobs", "careers", "employment", "job opening",
-                "now hiring", "we're hiring", "job posting", "apply now",
-                "join our team", "career opportunity",
-            ]):
-                hiring_found = True
-                hiring_results.append({
-                    "title": r.get("title", "")[:70],
-                    "snippet": (r.get("content", "") or "")[:120],
-                    "url": r.get("url", ""),
-                })
+
+            # T6: require a real hiring verb, not just the echoed query keyword
+            has_verb = any(v in combined for v in HIRING_VERBS)
+            # T6: require biz name in title or URL to avoid unrelated aggregator pages
+            name_present = any(w in title or w in url for w in name_words) if name_words else (biz_name_lower[:6] in title or biz_name_lower[:6] in url)
+            if not (has_verb and name_present):
+                continue
+
+            hiring_found = True
+            # T6: flag automatable role if mentioned
+            if any(role in combined for role in AUTOMATABLE_ROLES):
+                role_match = True
+            hiring_results.append({
+                "title": r.get("title", "")[:70],
+                "snippet": (r.get("content", "") or "")[:120],
+                "url": r.get("url", ""),
+            })
         if hiring_found:
-            break  # Don't do second query if first found results
+            break
         time.sleep(6)
-    
-    # Store in cache
-    if cache_key not in cache.get("businesses", {}):
-        cache["businesses"][cache_key] = {}
-    cache["businesses"][cache_key]["hiring_signals"] = hiring_results[:5]
-    cache["businesses"][cache_key]["hiring_checked"] = True
+
+    biz_entry = cache.setdefault("businesses", {}).setdefault(cache_key, {})
+    biz_entry["hiring_signals"] = hiring_results[:5]
+    biz_entry["hiring_checked"] = True
+    biz_entry["hiring_role_match"] = role_match
     return hiring_found
 
 
@@ -731,148 +745,230 @@ def search_review_signals(biz_name, cache_key, cache):
     return negative_found
 
 
+def corroborated(review_signals):
+    """T18: PRD §2b rule 7 — soft signal counts only when seen in ≥2 independent
+    sources or from a structured source. Tier-1 job postings are exempt (caller decides)."""
+    return sum(1 for r in review_signals if r.get("complaints")) >= 2
+
+
 def qualify_lead(biz, sq):
-    """Phase 2+3+4: Lead Qualification Score (0-100).
-    Measures BUYING READINESS for North Web Pro's automation services.
-    
-    AUTOMATION READINESS (0-40): Does the business have gaps we can fill?
-      - Gap-based scoring refined: no booking system (actual), no CRM (+15),
-        no marketing tools (+10), no analytics (+5)
-    GROWTH SIGNALS (0-30): Is the business growing? Hiring signals +15, admin/ops +15
-    DIGITAL GAP (0-15): Website score + outdated email +5, fax +5
-    CONTACTABILITY (0-15): Phone +10, email +5, has own site +3, snippet +2
-    """
+    """5-pillar buying-readiness score (0-100). See PRD.md §2 for the model.
+    T13 confidence gate: site-derived points require status==up+confidence==high.
+    T4 contactability gate: no phone AND no email → tier capped at Cold.
+    T5 tier rules: Hot requires contactable + strong qualifier + total ≥ 65.
+    T18 corroboration: review complaints require ≥2 review results with complaints."""
     if not sq:
         return {"score": 0, "tier": "Cold", "breakdown": {}, "reasons": ["not yet analyzed"]}
 
     breakdown = {}
     reasons = []
 
-    A = SCORING["automation"]
-    G = SCORING["growth"]
-    D = SCORING["digital"]
-    C = SCORING["contact"]
+    RW = SCORING["repetitive_work"]
+    NP = SCORING["named_pain"]
+    GB = SCORING["growth_budget"]
+    DF = SCORING["digital_footing"]
 
-    gaps = sq.get("automation_gaps", sq.get("issues", []))
+    gaps = sq.get("automation_gaps", [])
     status = sq.get("status", "unknown")
-    # T13 — confidence gate: only score what we actually observed. A site we
-    # couldn't read (down / blocked / unknown / JS-shell) earns ZERO from the
-    # site-derived pillars; we never reward our own fetch failure as opportunity.
-    # External signals (hiring, reviews, JSON-LD contacts) are exempt below.
+    # T13: only award site-derived points when we actually read the site
     verified = status == "up" and sq.get("confidence") == "high"
-
-    # ── AUTOMATION READINESS (site-derived → gated) ──
-    ar = 0
-    if verified:
-        for g in gaps:
-            weight = A["gap_weights"].get(g, A["gap_default"])
-            ar += weight
-            reasons.append(f"{g} (+{weight})")
-        ar = min(ar, A["max"])
-
-    breakdown["automation"] = min(ar, A["max"])
-
-    # ── GROWTH SIGNALS ──
-    growth = 0
     trade = biz.get("trade", "")
+    phones_list = biz.get("phones", [])
+    emails = biz.get("emails", []) or sq.get("emails", [])
 
-    # Hiring signals from SearXNG search (stored in biz)
-    hiring_signals = biz.get("hiring_signals", [])
-    if hiring_signals:
-        growth += G["hiring_signal"]
-        reasons.append(f"hiring signal detected (+{G['hiring_signal']})")
-    elif verified:
-        # Trade prior is a guess about a live business — only apply it when we
-        # could confirm the site is actually up (T13). No verification → no
-        # manufactured growth points from a business we couldn't read.
-        if trade in ADMIN_TRADES:
-            growth += G["trade_admin"]
-            reasons.append(f"admin/ops business — high automation demand (+{G['trade_admin']})")
-        elif trade in SCORING["trades_high"]:
-            growth += G["trade_high"]
-            reasons.append(f"high-demand trade for automation (+{G['trade_high']})")
-        elif trade in SCORING["trades_moderate"]:
-            growth += G["trade_moderate"]
-            reasons.append(f"moderate-demand trade (+{G['trade_moderate']})")
-        else:
-            growth += G["trade_other"]
-
-    # Negative review signals = business is losing customers (buying signal)
-    if biz.get("review_negative"):
-        growth += G["review_negative"]
-        reasons.append(f"negative reviews — losing customers (+{G['review_negative']})")
-
-    breakdown["growth"] = min(growth, G["max"])
-
-    # ── DIGITAL GAP (site-derived → gated) ──
-    dg = 0
+    # ── REPETITIVE-WORK LOAD (T3: admin/ops trade or appt trade + no booking) ──
+    rw = 0
     if verified:
+        if trade in ADMIN_TRADES:
+            rw += RW["admin_ops"]
+            reasons.append(f"admin/ops business — high intake/scheduling load (+{RW['admin_ops']})")
+        elif trade in SCORING["appointment_trades"] and any(
+            g in gaps for g in ("no booking system", "no booking/chat system")
+        ):
+            rw += RW["appointment_no_booking"]
+            reasons.append(f"appointment trade with no booking system (+{RW['appointment_no_booking']})")
+    breakdown["repetitive_work"] = min(rw, RW["max"])
+
+    # ── NAMED PAIN (external signal — exempt from verified gate) ──
+    # T18: require corroboration — complaint in ≥2 independent review results (PRD §2b rule 7)
+    np_score = 0
+    review_signals = biz.get("review_signals", [])
+    if biz.get("review_negative") and corroborated(review_signals):
+        np_score += NP["review_complaint"]
+        reasons.append(f"customers report slow/no response — our exact pitch (+{NP['review_complaint']})")
+    elif biz.get("review_negative"):
+        reasons.append("single complaint mention — needs corroboration to score")
+    breakdown["named_pain"] = min(np_score, NP["max"])
+
+    # ── GROWTH & BUDGET (T5) ──
+    gb = 0
+    hiring_role_match = biz.get("hiring_role_match", False)
+    hiring_signals = biz.get("hiring_signals", [])
+    if hiring_role_match:
+        gb += GB["automatable_role"]
+        reasons.append(f"hiring for an automatable role (+{GB['automatable_role']})")
+    elif hiring_signals:
+        gb += GB["generic_hiring"]
+        reasons.append(f"generic hiring signal (+{GB['generic_hiring']})")
+    elif verified:
+        # Trade prior: operational complexity proxy — only when we read the site (T13)
+        if trade in ADMIN_TRADES:
+            gb += GB["trade_admin"]
+            reasons.append(f"admin/ops trade — budget proxy (+{GB['trade_admin']})")
+        elif trade in SCORING["appointment_trades"]:
+            gb += GB["trade_appt"]
+            reasons.append(f"appointment trade — budget proxy (+{GB['trade_appt']})")
+    # Multi-location / multi-phone = operational complexity, independent of site read
+    if len(phones_list) > 1 or len(biz.get("own_domains", [])) > 1:
+        gb += GB["multi_signal"]
+        reasons.append(f"multi-location / multi-phone (+{GB['multi_signal']})")
+    breakdown["growth_budget"] = min(gb, GB["max"])
+
+    # ── DIGITAL FOOTING (T2: down/blocked capped low; verified earns full range) ──
+    df = 0
+    if status == "down":
+        df += DF["site_down"]
+        reasons.append(f"site appears down (+{DF['site_down']})")
+    elif status == "blocked":
+        df += DF["site_blocked"]
+        reasons.append(f"site bot-protected (+{DF['site_blocked']})")
+    elif verified:
         ws = sq.get("website_score", -1)
         if ws <= 1:
-            dg += D["ws_low"]
-            reasons.append(f"website score {ws}/5 — major digital gap (+{D['ws_low']})")
+            df += DF["ws_low"]
+            reasons.append(f"website score {ws}/5 — major gap (+{DF['ws_low']})")
         elif ws == 2:
-            dg += D["ws_2"]
-            reasons.append(f"website score 2/5 — clear gaps (+{D['ws_2']})")
+            df += DF["ws_2"]
+            reasons.append(f"website score 2/5 (+{DF['ws_2']})")
         elif ws == 3:
-            dg += D["ws_3"]
-            reasons.append(f"website score 3/5 — some gaps (+{D['ws_3']})")
-        # Score 4-5 = no gap, +0
-
-        # Digital laggard signals (read from the site we just verified)
+            df += DF["ws_3"]
+            reasons.append(f"website score 3/5 (+{DF['ws_3']})")
         if sq.get("has_outdated_email"):
-            dg += D["outdated_email"]
-            reasons.append(f"outdated email provider (digital laggard) (+{D['outdated_email']})")
+            df += DF["outdated_email"]
+            reasons.append(f"outdated email provider (+{DF['outdated_email']})")
         if sq.get("has_fax"):
-            dg += D["fax"]
-            reasons.append(f"fax number — paper-based operation (+{D['fax']})")
+            df += DF["fax"]
+            reasons.append(f"fax number — paper-based (+{DF['fax']})")
+    breakdown["digital_footing"] = min(df, DF["max"])
 
-    breakdown["digital"] = min(dg, D["max"])
-
-    # ── CONTACTABILITY ──
-    contact = 0
-    phones = biz.get("phones", [])
-    if phones:
-        contact += C["phone"]
-        reasons.append(f"phone found (+{C['phone']})")
-    emails = biz.get("emails", []) or sq.get("emails", [])
-    if emails:
-        contact += C["email"]
-        reasons.append(f"email found (+{C['email']})")
-    if biz.get("has_own_site"):
-        contact += C["own_site"]  # Has a website = can find contact page
-    if biz.get("snippet") and len(biz.get("snippet", "")) > 50:
-        contact += C["snippet"]  # Has a description = more info to work with
-    breakdown["contact"] = min(contact, C["max"])
-
-    if not verified:
+    if not verified and status not in ("down", "blocked"):
         reasons.append("site unverified — scored on external signals only")
 
     # ── TOTAL ──
-    total = breakdown["automation"] + breakdown["growth"] + breakdown["digital"] + breakdown["contact"]
+    total = (breakdown["repetitive_work"] + breakdown["named_pain"] +
+             breakdown["growth_budget"] + breakdown["digital_footing"])
 
-    if total >= SCORING["tiers"]["hot"]:
+    # ── CONTACTABILITY GATE (T4) ──
+    contactable = bool(phones_list) or bool(emails)
+
+    # ── TIER RULES (T5) ──
+    # Hot: contactable AND (named pain OR automatable-role hiring OR verified admin/ops) AND ≥65
+    hot_qualifier = (
+        (biz.get("review_negative") and corroborated(review_signals))
+        or hiring_role_match
+        or (trade in ADMIN_TRADES and verified)
+    )
+    if contactable and hot_qualifier and total >= SCORING["tiers"]["hot"]:
         tier = "Hot"
-    elif total >= SCORING["tiers"]["warm"]:
+    elif contactable and total >= SCORING["tiers"]["warm"]:
         tier = "Warm"
     else:
         tier = "Cold"
+        if not contactable:
+            reasons.append("no contact info — can't reach")
+
+    # Unverified: site unreadable + no external signals + not contactable → quarantine
+    if (status in ("down", "blocked", "unknown")
+            and not biz.get("review_negative")
+            and not hiring_signals
+            and not contactable):
+        tier = "Unverified"
 
     return {"score": total, "tier": tier, "breakdown": breakdown, "reasons": reasons}
 
 
+def _test_qualify_lead():
+    """ponytail: assert-based acceptance check for T2–T5 scoring rules."""
+    _sq_up = {"status": "up", "confidence": "high", "website_score": 2,
+               "automation_gaps": ["no booking system"], "emails": []}
+    _sq_down = {"status": "down", "confidence": "low", "website_score": -1,
+                "automation_gaps": [], "emails": []}
+    _sq_unknown = {"status": "unknown", "confidence": "low", "automation_gaps": [], "emails": []}
+
+    # T2: down-only business scores ≤ 10 and is Cold or Unverified (never Hot)
+    r = qualify_lead({"trade": "Plumbing", "phones": [], "own_domains": []}, _sq_down)
+    assert r["tier"] in ("Cold", "Unverified"), f"T2 fail: down-only → {r['tier']}"
+    assert r["score"] <= 10, f"T2 fail: down-only score {r['score']} > 10"
+
+    # T2/T4: down + no contact → Unverified
+    r2 = qualify_lead({"trade": "Plumbing", "phones": [], "own_domains": [],
+                        "hiring_signals": [], "review_negative": False}, _sq_down)
+    assert r2["tier"] == "Unverified", f"T2 fail: down+no-contact → {r2['tier']}"
+
+    # T3: admin/ops + verified site should score repetitive_work=25
+    r3 = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-1234"], "own_domains": ["a.com"]}, _sq_up)
+    assert r3["breakdown"]["repetitive_work"] == 25, f"T3 fail: admin rw={r3['breakdown']['repetitive_work']}"
+
+    # T4: high score but no contact → Cold
+    r4 = qualify_lead({"trade": "Accounting", "phones": [], "own_domains": ["a.com"],
+                        "review_negative": True, "hiring_role_match": True,
+                        "hiring_signals": [{"title": "x"}]},
+                       {"status": "up", "confidence": "high", "website_score": 1,
+                        "automation_gaps": [], "emails": []})
+    assert r4["tier"] == "Cold", f"T4 fail: no-contact high-score → {r4['tier']}"
+
+    # T5: gap-stacking alone (no admin trade, no complaint, no hiring) cannot reach Hot
+    r5 = qualify_lead({"trade": "Plumbing", "phones": ["(951) 555-0001"], "own_domains": ["b.com"],
+                        "hiring_signals": [], "review_negative": False},
+                       {"status": "up", "confidence": "high", "website_score": 1,
+                        "automation_gaps": ["no booking system"], "emails": []})
+    assert r5["tier"] != "Hot", f"T5 fail: gap-stacking → Hot (score={r5['score']})"
+
+    # T5+T18: admin + corroborated complaint + phone → Hot
+    # Two review_signals entries each with complaints satisfies corroborated()
+    r6 = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
+                        "own_domains": ["c.com"], "review_negative": True,
+                        "review_signals": [
+                            {"complaints": ["slow"], "title": "r1"},
+                            {"complaints": ["no response"], "title": "r2"},
+                        ],
+                        "hiring_signals": [], "hiring_role_match": False},
+                       {"status": "up", "confidence": "high", "website_score": 2,
+                        "automation_gaps": [], "emails": []})
+    assert r6["tier"] == "Hot", f"T5 fail: admin+corroborated-complaint → {r6['tier']} (score={r6['score']})"
+
+    # T18: single complaint (no corroboration) does NOT earn named_pain points
+    r7 = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
+                        "own_domains": ["d.com"], "review_negative": True,
+                        "review_signals": [{"complaints": ["slow"], "title": "r1"}],
+                        "hiring_signals": [], "hiring_role_match": False},
+                       {"status": "up", "confidence": "high", "website_score": 2,
+                        "automation_gaps": [], "emails": []})
+    assert r7["breakdown"]["named_pain"] == 0, f"T18 fail: single complaint → named_pain={r7['breakdown']['named_pain']}"
+    print("qualify_lead self-check: all assertions passed")
+
+
 def load_cache():
-    """Load the business cache from disk."""
+    """T8: Tier-aware TTL — Hot/Warm kept 30 days, Cold/Unverified 7 days.
+    Also prunes signals and fb_groups older than 14 days."""
     if CACHE_FILE.exists():
         try:
-            with open(CACHE_FILE) as f:
+            with open(CACHE_FILE, encoding="utf-8") as f:
                 cache = json.load(f)
-            # Expire entries older than 7 days
-            cutoff = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
-            cache["businesses"] = {
-                k: v for k, v in cache.get("businesses", {}).items()
-                if v.get("last_seen", "") > cutoff
-            }
+            now_iso = datetime.now(timezone.utc)
+            cutoff_hot  = (now_iso - timedelta(days=30)).isoformat()
+            cutoff_cold = (now_iso - timedelta(days=7)).isoformat()
+            cutoff_sig  = (now_iso - timedelta(days=14)).isoformat()
+
+            def _keep(v):
+                tier = v.get("lead_score", {}).get("tier", "Cold")
+                cutoff = cutoff_hot if tier in ("Hot", "Warm") else cutoff_cold
+                return v.get("last_seen", "") > cutoff
+
+            cache["businesses"] = {k: v for k, v in cache.get("businesses", {}).items() if _keep(v)}
+            # Prune stale signals/fb_groups (no date field → keep to be safe)
+            cache["signals"] = [s for s in cache.get("signals", []) if s.get("date", "z") > cutoff_sig]
+            cache["fb_groups"] = [g for g in cache.get("fb_groups", []) if g.get("date", "z") > cutoff_sig]
             return cache
         except (json.JSONDecodeError, KeyError):
             pass
@@ -891,7 +987,7 @@ def backup_cache(cache):
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     ts = datetime.now().strftime("%Y%m%d_%H%M")
     backup = REPORT_DIR / f"cache-backup-{ts}.json"
-    with open(backup, "w") as f:
+    with open(backup, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2)
     # Keep only the last 10 backups
     backups = sorted(REPORT_DIR.glob("cache-backup-*.json"))
@@ -1052,6 +1148,15 @@ body {
 }
 .footer .pitch strong { color: #D97548; font-style: normal; }
 
+/* Pitch line */
+.pitch-line {
+    margin-top: 8px; padding: 7px 10px;
+    background: rgba(96,207,244,0.05); border-left: 2px solid #60CFF4;
+    border-radius: 0 4px 4px 0; font-size: 0.8em; color: #60CFF4;
+    line-height: 1.4;
+}
+.pitch-label { font-weight: 600; color: #60CFF4; margin-right: 4px; }
+
 /* Collapsible details */
 details summary {
     cursor: pointer; color: #666; font-size: 0.78em;
@@ -1068,6 +1173,25 @@ details summary:hover { color: #60CFF4; }
 """
 
 
+def pitch_for(biz):
+    """T9: Derive a plain-English pitch line from the top buying signal.
+    ponytail: priority table, first match wins."""
+    trade = biz.get("trade", "")
+    if biz.get("review_negative"):
+        return "24/7 digital receptionist that answers + books every call — fix the slow-response complaints"
+    if biz.get("hiring_role_match"):
+        return "replace the role you're hiring for with a digital worker (no salary, no sick days)"
+    if trade in ADMIN_TRADES:
+        return "digital worker for intake, scheduling & follow-up — frees your staff for billable work"
+    if biz.get("hiring_signals"):
+        return "automate the role you're hiring for before you post the job"
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return "automated booking + reminders — capture every call that goes to voicemail"
+    return "digital worker to handle intake, scheduling & follow-up"
+
+
 def lead_score_badge(tier, score):
     """Generate a colored badge for the lead qualification tier."""
     if tier == "Hot":
@@ -1078,17 +1202,17 @@ def lead_score_badge(tier, score):
         return f'<span class="badge badge-cold">{score}/100</span>'
 
 
-def generate_html_report(cache, zip_code="92562"):
+def generate_html_report(cache, zip_code="92562", prev_run=None):
     """Phase 4: HTML report organized by lead qualification score, not website score.
-    Hot leads at top, sorted by score. Shows why each lead is qualified."""
+    prev_run: the last_run value BEFORE this run started, used for NEW badges (T7)."""
     businesses = cache.get("businesses", {})
     signals = cache.get("signals", [])
     fb_groups = cache.get("fb_groups", [])
     now = datetime.now(timezone.utc)
     today = now.strftime("%a %b %d, %Y")
     total_runs = cache.get("runs", 0)
-    last_run_iso = cache.get("last_run")
-    new_cutoff = last_run_iso or (now - timedelta(hours=24)).isoformat()
+    # T7: use prev_run (captured before cache["last_run"] was overwritten) so NEW badges work
+    new_cutoff = prev_run or (now - timedelta(hours=24)).isoformat()
 
     # Ensure every business has a lead_score
     for biz in businesses.values():
@@ -1097,16 +1221,17 @@ def generate_html_report(cache, zip_code="92562"):
         is_new = biz.get("first_seen", "") > new_cutoff
         biz["_new"] = is_new
 
-    # Categorize by lead tier
-    hot, warm, cold = [], [], []
+    # T9: Categorize by lead tier — Unverified is its own bucket, not Cold
+    hot, warm, cold, unverified = [], [], [], []
     for biz in businesses.values():
         ls = biz.get("lead_score", {})
-        score = ls.get("score", 0)
         tier = ls.get("tier", "Cold")
         if tier == "Hot":
             hot.append(biz)
         elif tier == "Warm":
             warm.append(biz)
+        elif tier == "Unverified":
+            unverified.append(biz)
         else:
             cold.append(biz)
 
@@ -1195,12 +1320,18 @@ def generate_html_report(cache, zip_code="92562"):
             html += '<span class="lead-status status-blocked">● UNVERIFIED</span>'
         html += '</div>'
 
-        # Qualification reasons (why this lead is qualified)
-        if reasons:
-            html += '<div class="lead-reasons">'
-            for r in reasons[:6]:
+        # T9: "Pitch this:" — the concrete offer, derived from signals (not scoring internals)
+        if tier in ("Hot", "Warm"):
+            pitch = pitch_for(biz)
+            html += f'<div class="pitch-line"><span class="pitch-label">Pitch this:</span>{pitch}</div>'
+
+        # T9: scoring reasons go into a collapsible detail, not the headline
+        signal_reasons = [r for r in reasons if not r.startswith("no contact info")]
+        if signal_reasons:
+            html += '<details><summary>Why this score</summary><div class="lead-reasons">'
+            for r in signal_reasons[:8]:
                 html += f'<span class="reason-tag">{r}</span>'
-            html += '</div>'
+            html += '</div></details>'
 
         html += '</div>'
         return html
@@ -1240,6 +1371,20 @@ def generate_html_report(cache, zip_code="92562"):
             section += render_lead_card(biz)
         if len(cold) > 10:
             section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(cold)-10} more cold leads...</p>'
+        section += '</details></div>'
+        cards.append(section)
+
+    # T9: UNVERIFIED — site unreadable, no external signals, no contact info
+    # Collapsed by default; don't pollute the actionable lead stream
+    if unverified:
+        section = '<div class="section">'
+        section += '<div class="section-title"><h2>🛰️ Unverified — couldn\'t confirm</h2>'
+        section += f'<span class="badge badge-cold">{len(unverified)}</span></div>'
+        section += f'<details><summary>{len(unverified)} businesses — site unreadable, no external signal, low confidence</summary>'
+        for biz in unverified[:8]:
+            section += render_lead_card(biz)
+        if len(unverified) > 8:
+            section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(unverified)-8} more...</p>'
         section += '</details></div>'
         cards.append(section)
 
@@ -1306,14 +1451,15 @@ def generate_html_report(cache, zip_code="92562"):
 </body></html>"""
 
 
-def send_report(cache, zip_code, now):
+def send_report(cache, zip_code, now, prev_run=None):
     """Generate HTML report, write to file, send to Telegram. ponytail: extracted from 2 duplicate blocks."""
-    html = generate_html_report(cache, zip_code)
+    html = generate_html_report(cache, zip_code, prev_run=prev_run)
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
     report_path = REPORT_DIR / f"scout-report-{now.strftime('%Y%m%d_%H%M')}.html"
-    with open(report_path, "w") as f:
+    with open(report_path, "w", encoding="utf-8") as f:
         f.write(html)
-    hermes = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    _h = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
+    hermes = _h if os.path.isfile(_h) else None
     if hermes:
         subprocess.run([hermes, "send", "-t", "telegram:-5131689526",
             f"Lead Scout Report — {now.strftime('%b %d, %H:%M')} PT\nMEDIA:{report_path}"],
@@ -1336,11 +1482,13 @@ def main():
 
     cache = load_cache()
     now = datetime.now(timezone.utc)
+    # T7: capture before any crawl so the report can mark truly-new businesses
+    prev_run = cache.get("last_run")
 
     # ── BRIEFING-ONLY MODE ──
     if args.briefing:
         if args.html:
-            send_report(cache, args.zip, now)
+            send_report(cache, args.zip, now, prev_run=prev_run)
         sys.exit(0)
 
     # ── PICK NEXT QUERY GROUP ──
@@ -1392,7 +1540,9 @@ def main():
                         if domain in eb.get("own_domains", []):
                             existing_norm = en
                             break
-                norm = existing_norm or re.sub(r'[^a-z0-9]', '', name.lower())[:25]
+                # T11: no-domain businesses get a hash suffix so distinct firms with similar names don't collide
+                norm = existing_norm or (re.sub(r'[^a-z0-9]', '', name.lower())[:20]
+                                         + ("" if is_own_site else f"-{abs(hash(name)) % 1000}"))
 
                 if norm in cache["businesses"]:
                     b = cache["businesses"][norm]
@@ -1521,7 +1671,7 @@ def main():
                 if any(s in domain for s in skip):
                     continue
                 if "facebook.com/groups" in url.lower():
-                    cache.setdefault("fb_groups", []).append({"name": title[:60], "url": key})
+                    cache.setdefault("fb_groups", []).append({"name": title[:60], "url": key, "date": now.isoformat()})
                     continue
                 text = (title + " " + snippet).lower()
                 is_person = any(d in domain for d in ["reddit.com", "facebook.com"])
@@ -1553,7 +1703,7 @@ def main():
 
     # ── OUTPUT ──
     if args.html:
-        send_report(cache, args.zip, now)
+        send_report(cache, args.zip, now, prev_run=prev_run)
     sys.exit(0)
 
 

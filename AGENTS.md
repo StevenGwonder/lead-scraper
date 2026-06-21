@@ -93,9 +93,11 @@ is a gate, not a bonus.
 
 ## 3. Hard constraints (do not break these)
 
-- **Python 3 standard library only.** No pip installs. The script runs unattended
-  inside a VirtualBox on an old iMac (host "Hermes") via cron. Keep it light and
-  synchronous; assume modest CPU and that long runs are fine but heavy deps are not.
+- **Python 3 with pip allowed.** The script runs unattended inside a VirtualBox
+  on an old iMac (host "Hermes") via cron. Any new package must be manually
+  installed on Hermes before the next cron run; keep deps small and justified —
+  only add one if it genuinely lifts lead quality over what stdlib already does.
+  Keep the script light and synchronous; assume modest CPU.
 - **Zero LLM tokens at runtime.** The cron job runs with `no_agent: true`. All
   scoring is deterministic Python. (LLMs may be used by *developers* to edit this
   code — that is what `PRD.md` task prompts are for — but never called from the
