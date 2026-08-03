@@ -1,0 +1,4229 @@
+{
+  "_meta": {
+    "task": "SGW-861",
+    "description": "Labeled prospect benchmark set for NWP Precision Lead Engine",
+    "exported_from": "/home/steven/.hermes/scripts/local-biz-cache.json",
+    "cache_business_count": 409,
+    "count": 53,
+    "anonymization": "real phones/emails replaced with placeholders",
+    "seed": 92562,
+    "exported_at": "2026-08-03T23:36:07.253073"
+  },
+  "prospects": {
+    "1personalinjuryattor": {
+      "id": "1personalinjuryattor",
+      "name": "#1 Personal Injury Attorneys",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 49,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "khashanlaw.com",
+      "first_seen": "2026-07-08T05:00:10.941774+00:00",
+      "last_seen": "2026-07-08T05:00:10.941774+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01102",
+        "(951) 555-01103"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "khashanlaw.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$89k-$220k Personal Injury Attorney Jobs (NOW HIRING) Aug 25",
+          "snippet": "To become a personal injury attorney, you need a bachelor\u2019s degree, followed by a law degree from an accredited institut",
+          "url": "https://www.ziprecruiter.com/Jobs/Personal-Injury-Attorney"
+        },
+        {
+          "title": "$17-$48/hr Personal Injury Jobs (NOW HIRING) Feb 2026",
+          "snippet": "Browse 1000+ PERSONAL INJURY jobs ($17-$48/hr) from companies with openings that are hiring now. Find job postings near ",
+          "url": "https://www.ziprecruiter.com/Jobs/Personal-Injury"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Best Personal Injury Litigation - Plaintiffs Lawyers in America",
+          "snippet": "William B. Kilduff is a top attorney recognized by Best Lawyers in the practice area(s) of Medical Malpractice Law - Pla",
+          "url": "https://www.bestlawyers.com/united-states/personal-injury-litigation-plaintiffs",
+          "complaints": []
+        },
+        {
+          "title": "Top Rated Murrieta, CA Personal Injury Lawyers - Avvo.com",
+          "snippet": "FREE detailed reports on 59 Personal Injury Attorneys in Murrieta, California. Find 925 reviews, disciplinary sanctions,",
+          "url": "https://www.avvo.com/personal-injury-lawyer/ca/murrieta.html",
+          "complaints": []
+        },
+        {
+          "title": "Who is the best personal injury attorney in Louisiana and what are the",
+          "snippet": "Need a trial lawyer? See the 2026 list of the best personal injury attorneys in Louisiana. Verified reviews, AV ratings,",
+          "url": "https://ricekendig.com/blog/best-personal-injury-attorneys-louisiana",
+          "complaints": []
+        },
+        {
+          "title": "THE BEST 10 PERSONAL INJURY LAW IN MURRIETA, CA - Yelp",
+          "snippet": "What are people saying about personal injury law services in Murrieta, CA? This is a review for a personal injury law bu",
+          "url": "https://www.yelp.com/search?cflt=personal_injury&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "3 Best Personal Injury Lawyers in Murrieta, CA",
+          "snippet": "3 Best Personal Injury Lawyers in Murrieta, CA Expert-recommended Top 3 Personal Injury Lawyers in Murrieta, California.",
+          "url": "https://threebestrated.com/personal-injury-lawyers-in-murrieta-ca",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no click-to-call",
+          "no contact page",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "WordPress",
+        "words": 2095,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "aboutapexplumbingser": {
+      "id": "aboutapexplumbingser",
+      "name": "About Apex Plumbing Services",
+      "trade": "Plumbing",
+      "tier": "Cold",
+      "score": 34,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "callapexnow.com/about-us",
+      "first_seen": "2026-07-06T21:00:16.153639+00:00",
+      "last_seen": "2026-07-31T05:00:06.969344+00:00",
+      "phones_anonymized": [
+        "(951) 555-01104",
+        "(951) 555-01105",
+        "(951) 555-01106"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "callapexnow.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$22-$38/hr Apex Plumbing Jobs Columbus, OH (NOW HIRING)",
+          "snippet": "We pride ourselves on delivering white glove home services solutions for our neighbors here in Columbus and the metro ar",
+          "url": "https://www.ziprecruiter.com/Jobs/Apex-Plumbing/-in-Columbus,OH"
+        },
+        {
+          "title": "APEX PLUMBING Employment and Reviews | SimplyHired",
+          "snippet": "Read APEX PLUMBING reviews, including information from current and former employees on salaries, benefits, and more. Fin",
+          "url": "https://www.simplyhired.com/browse-jobs/companies/Apex-Plumbing"
+        },
+        {
+          "title": "$23-$62/hr Apex Plumbing Jobs (NOW HIRING) Sep 2025",
+          "snippet": "Their services typically include plumbing repairs, drain cleaning, water heater installation and repair, leak detection,",
+          "url": "https://www.ziprecruiter.com/Jobs/Apex-Plumbing"
+        },
+        {
+          "title": "APEX PLUMBING Jobs (Now Hiring) Near Me Oct 2025",
+          "snippet": "Looking to work for Apex Plumbing? ZipRecruiter has 66 Apex Plumbing jobs available that are hiring now. Start your care",
+          "url": "https://www.ziprecruiter.com/co/Apex-Plumbing/Jobs"
+        },
+        {
+          "title": "APEX PLUMBING SOLUTIONS Jobs in Danville, KY (Now Hiring)",
+          "snippet": "Apex Solutions is looking for a proven leader to take ownership of an established $3.2M plumbing division and scale it t",
+          "url": "https://www.ziprecruiter.com/co/Apex-Plumbing-Solutions/Jobs/-in-Danville,KY?uuid=N3ZsvWZpZi1ktt6C6R56/zo7BmE%3D&radius=25"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Reviews For Our Plumbing Company - Danville - Apex Solutions",
+          "snippet": "I had a mini split installed in a bonus area that was completed in a timely and efficient manner. I highly recommend Ape",
+          "url": "https://apexplumbingky.com/reviews/",
+          "complaints": []
+        },
+        {
+          "title": "Apex Plumbing Pros Homeowners Reviews and Complaints | ComplaintsBoard",
+          "snippet": "Read 14 honest reviews and 6 complaints about Apex Plumbing Pros, rated 2.4 out of 5 by customers and their services. Sh",
+          "url": "https://www.complaintsboard.com/apex-plumbing-pros-b164763",
+          "complaints": []
+        },
+        {
+          "title": "Apex Plumbing Reviews 2026 | Trustindex.io - Trustindex.io",
+          "snippet": "We cannot thank Apex enough and highly HIGHLY recommend their services. ... Needed my curb stop replaced, these guys did",
+          "url": "https://www.trustindex.io/reviews/apexplumbing.com",
+          "complaints": []
+        },
+        {
+          "title": "APEX PLUMBING SERVICES - Updated August 2026 - 97 Photos & 21 Reviews ",
+          "snippet": "Specialties: If it's plumbing related we can fix it ,replace it or install it . From dripping faucets to water heater re",
+          "url": "https://www.yelp.com/biz/apex-plumbing-services-santa-ynez-4",
+          "complaints": []
+        },
+        {
+          "title": "Apex Plumbing Reviews 2026 | Trustindex.io",
+          "snippet": "Apex Plumbing is trusted by over 414 happy customers, earning a 4.9-star rating! Explore real reviews and share your own",
+          "url": "https://www.trustindex.io/reviews/apexplumbing.us12.cdn-alpha.com",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 13771,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "accounting": {
+      "id": "accounting",
+      "name": "Accounting",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 41,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "bookkeepingservicesplus.net",
+      "first_seen": "2026-07-28T13:00:15.891477+00:00",
+      "last_seen": "2026-07-28T13:00:15.891477+00:00",
+      "phones_anonymized": [
+        "(951) 555-01107"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "bookkeepingservicesplus.net"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Entry Level Accounting Jobs in Murrieta, CA (NOW HIRING)",
+          "snippet": "Browse 23 MURRIETA, CA ENTRY LEVEL ACCOUNTING jobs ($17-$41/hr) hiring now. New openings posted daily. Apply early, get ",
+          "url": "https://www.ziprecruiter.com/Jobs/Entry-Level-Accounting/-in-Murrieta,CA"
+        },
+        {
+          "title": "Accounting Opportunities - CalCPA",
+          "snippet": "CalCPA offers the top opportunities available in Accounting. Search and apply to open positions or post jobs on CalCPA n",
+          "url": "https://cpajobs.calcpa.org/"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "The Accounting Review | American Accounting Association",
+          "snippet": "The mission of The Accounting Review is to publish high-quality academic research using rigorous, state-of-the-art, rese",
+          "url": "https://aaahq.org/Research/Journals/The-Accounting-Review",
+          "complaints": []
+        },
+        {
+          "title": "THE BEST 10 ACCOUNTANTS IN MURRIETA, CA - Yelp",
+          "snippet": "This is a review for a accountants business in Murrieta, CA: \"I called and left my information with Tae's office to get ",
+          "url": "https://www.yelp.com/search?cflt=accountants&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Accounting in Murrieta, CA - Updated 2026 - Quality ... - ",
+          "snippet": "What are people saying about accountants services in Murrieta, CA? This is a review for a accountants business in Murrie",
+          "url": "https://www.yelp.com/search?find_desc=Accounting&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "The Accounting Review | American Accounting Association",
+          "snippet": "About the American Accounting Association The American Accounting Association is the largest community of accountants in",
+          "url": "https://publications.aaahq.org/accounting-review",
+          "complaints": []
+        },
+        {
+          "title": "Wave Review: Features, Pros And Cons - Forbes Advisor",
+          "snippet": "Read our Wave accounting review covering its pricing, features, pros and cons to see if this free accounting software fi",
+          "url": "https://www.forbes.com/advisor/business/wave-accounting-review/",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no click-to-call",
+          "not mobile-responsive",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "WordPress",
+        "words": 3069,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "accurateaccounting": {
+      "id": "accurateaccounting",
+      "name": "Accurate Accounting",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 49,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "accuacct.com",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01108",
+        "(951) 555-01109",
+        "(951) 555-01110"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "accuacct.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Accounting Opportunities - CalCPA",
+          "snippet": "CalCPA offers the top opportunities available in Accounting. Search and apply to open positions or post jobs on CalCPA n",
+          "url": "https://cpajobs.calcpa.org/"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Accurate Accounting, Murrieta, CA - Reviews (10), Photos (17 ...",
+          "snippet": "Read what people in Murrieta are saying about their experience with Accurate Accounting at Covid Mailing Address, 29574 ",
+          "url": "https://www.bestprosintown.com/ca/murrieta/accurate-accounting-/",
+          "complaints": []
+        },
+        {
+          "title": "Accurate Accounting - 71 Reviews - Accountants in Murrieta, CA - Birde",
+          "snippet": "Read 71 customer reviews of Accurate Accounting, one of the best Accountants businesses at 29970 Technology Dr #216, Ste",
+          "url": "https://reviews.birdeye.com/accurate-accounting-157285504966952",
+          "complaints": []
+        },
+        {
+          "title": "ACCURATE ACCOUNTING CPA - Updated July 2026 - 24 Photos - 29970 ... - ",
+          "snippet": "Specialties: Accounting Firm In Murrieta, CA | Accurate Accounting From bookkeeping to tax audit representation services",
+          "url": "https://www.yelp.com/biz/accurate-accounting-cpa-murrieta",
+          "complaints": []
+        },
+        {
+          "title": "Reviews - Accurate Accounting",
+          "snippet": "He helped us stay compliant in accounting, tax and payroll issues. As a business owner these are probably the most time ",
+          "url": "https://accuacct.com/reviews/",
+          "complaints": []
+        },
+        {
+          "title": "ACCURATE ACCOUNTING & TAX SERVICES - Updated July 2026 - 12 Reviews ..",
+          "snippet": "Specialties: Former IRS Agent will provide Tax advice and IRS audit help. Tax Planning, Tax Preparation, Corporation and",
+          "url": "https://www.yelp.com/biz/accurate-accounting-and-tax-services-la-habra-2",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 5669,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/accuacctx",
+          "https://www.instagram.com/accu.acct/"
+        ]
+      },
+      "archetype": "false_positive"
+    },
+    "acrepair": {
+      "id": "acrepair",
+      "name": "AC Repair",
+      "trade": "HVAC",
+      "tier": "Cold",
+      "score": 38,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "website score 2/5 (+8)"
+      ],
+      "url": "socalacguy.com/ac-repair-murrieta",
+      "first_seen": "2026-07-06T21:00:16.153639+00:00",
+      "last_seen": "2026-07-31T05:00:06.969344+00:00",
+      "phones_anonymized": [
+        "(951) 555-01111"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "socalacguy.com",
+        "actionac.net",
+        "friendsandfamilyhvac.com",
+        "calibreezehvac.com",
+        "mauzy.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "HVAC Jobs San Antonio - Apply Today - Atlas AC Repair, LLC",
+          "snippet": "HVAC Installation Technician Jobs in San Antonio and Austin \u00b7 HVAC is the cornerstone of our industry. It\u2019s hard, honest",
+          "url": "https://atlasacrepair.com/careers/hvac-jobs-san-antonio/"
+        },
+        {
+          "title": "$14-$21/hr Ac Repair Jobs in Fayetteville, AR (NOW HIRING)",
+          "snippet": "Browse 17 FAYETTEVILLE, AR AC REPAIR jobs ($14-$21/hr) hiring now. New openings posted daily. Apply early, get seen firs",
+          "url": "https://www.ziprecruiter.com/Jobs/Ac-Repair/-in-Fayetteville,AR"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Aircon - Updated July 2026 - 339 Photos & 69 Reviews - New York, New Y",
+          "snippet": "Ac Deep Cleaning32 Photos 1 Review \u00b7 Ac Troubleshooting & Repair2 Photos 1 Review \u00b7 Verified by Business \u00b7 HVAC installa",
+          "url": "https://www.yelp.com/biz/aircon-new-york-7",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Ac Repair in Murrieta, CA - Updated 2026 - Quality ... - Y",
+          "snippet": "What are people saying about heating & air conditioning/hvac services in Murrieta, CA? This is a review for a heating & ",
+          "url": "https://www.yelp.com/search?find_desc=Ac+Repair&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "HVAC Services in New York, NY | Top Rated Contractors",
+          "snippet": "Find the best HVAC service providers in New York, NY. Compare 30 top-rated HVAC contractors with reviews, ratings, and c",
+          "url": "https://hvacservice.io/ny/new-york",
+          "complaints": []
+        },
+        {
+          "title": "Reviews - NY NJ A/C Connection \u2013 Manhattan New York Central Air Condit",
+          "snippet": "He diagnosed the problem and before we knew it, his furnace repair had Fran up and running again. The price was reasonab",
+          "url": "http://www.nynjacconnection.com/reviews/",
+          "complaints": []
+        },
+        {
+          "title": "THE BEST 10 HEATING & AIR CONDITIONING/HVAC IN MURRIETA, CA - Yelp",
+          "snippet": "What are people saying about heating & air conditioning/hvac services in Murrieta, CA? This is a review for a heating & ",
+          "url": "https://www.yelp.com/search?cflt=hvac&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 2,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no contact page",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 3699,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "http://socalacguy.com"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "allstatecarinsurance": {
+      "id": "allstatecarinsurance",
+      "name": "Allstate Car Insurance Agent",
+      "trade": "Insurance",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "agents.allstate.com/nathan-giddings-murrieta-ca.html",
+      "first_seen": "2026-06-21T09:48:34.635786+00:00",
+      "last_seen": "2026-08-03T13:00:40.873374+00:00",
+      "phones_anonymized": [
+        "(951) 555-01112",
+        "(951) 555-01113",
+        "(951) 555-01114"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "agents.allstate.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Careers at Allstate | Allstate Corporation",
+          "snippet": "Search jobs Check application Join the Allstate Careers Community At Allstate, we're driven by purpose and committed to ",
+          "url": "https://www.allstatecorporation.com/careers.aspx"
+        },
+        {
+          "title": "Allstate Sales Careers",
+          "snippet": "Work for a local Allstate agency, helping customers discover their insurance needs and educate them on the right product",
+          "url": "https://www.allstate.com/lps/salescareers"
+        },
+        {
+          "title": "Allstate Jobs & Careers - 902 Open Positions | Glassdoor",
+          "snippet": "Yes, Allstate is currently hiring for 902 open positions in the United States. Use Glassdoor to find and apply for a job",
+          "url": "https://www.glassdoor.com/Jobs/Allstate-Jobs-E2341.htm"
+        },
+        {
+          "title": "$33k-$250k Allstate Jobs (NOW HIRING) Jun 2026",
+          "snippet": "Browse 1000+ ALLSTATE jobs ($33k-$250k) from companies hiring now. New openings posted daily. Apply early, be seen first",
+          "url": "https://www.ziprecruiter.com/Jobs/Allstate"
+        },
+        {
+          "title": "Work With Us | The Standard",
+          "snippet": "To find out more about getting appointed with The Standard, please call our Customer Care Center at 1-800-521-3535 and p",
+          "url": "https://www.allstate.com/allstate-benefits/work-with-allstate-benefits"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Allstate Car Insurance Reviews (From First-hand Experiences)",
+          "snippet": "You can file claims with Allstate online, and the company extends discounts for bundling multiple insurance policies. ..",
+          "url": "https://www.consumeraffairs.com/insurance/allstate_auto.html",
+          "complaints": []
+        },
+        {
+          "title": "Allstate Insurance Reviews (2026): 2,400+ User Ratings - WalletHub",
+          "snippet": "Allstate is one of the largest insurance companies in the U.S. The company was founded in 1931, and it now serves more t",
+          "url": "https://wallethub.com/profile/ci/allstate-13012586i",
+          "complaints": []
+        },
+        {
+          "title": "Where is Allstate the best car insurance company?",
+          "snippet": "Check out its offerings: Allstate ranks 10th for overall customer satisfaction in MoneyGeek's comprehensive customer exp",
+          "url": "https://www.moneygeek.com/insurance/auto/reviews/allstate/",
+          "complaints": []
+        },
+        {
+          "title": "Allstate Car Insurance Review for 2026 | U.S. News",
+          "snippet": "Allstate has a solid lineup of options and discounts for its car insurance policies, and it scored high marks in our rat",
+          "url": "https://www.usnews.com/insurance/auto/allstate-car-insurance-review",
+          "complaints": []
+        },
+        {
+          "title": "Allstate Reviews | Read Customer Service Reviews of allstate.com - Yel",
+          "snippet": "Allstate has an average rating of 3.6 from 15026 reviews. The rating indicates that most customers are generally satisfi",
+          "url": "https://www.yelp.com/brands/allstate",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 3076,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Analytics",
+          "Google Tag"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "bankruptcyattorney": {
+      "id": "bankruptcyattorney",
+      "name": "Bankruptcy Attorney",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "pickfordlaw.com",
+      "first_seen": "2026-06-21T09:48:34.635786+00:00",
+      "last_seen": "2026-08-03T13:00:40.873374+00:00",
+      "phones_anonymized": [
+        "(951) 555-01115",
+        "(951) 555-01116",
+        "(951) 555-01117",
+        "(951) 555-01118"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "pickfordlaw.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$76k-$250k Bankruptcy Attorney Jobs (NOW HIRING) May 2026",
+          "snippet": "Browse 60+ BANKRUPTCY ATTORNEY jobs ($76k-$250k) from companies hiring now. New openings. Be seen first by employers and",
+          "url": "https://www.ziprecruiter.com/Jobs/Bankruptcy-Attorney"
+        },
+        {
+          "title": "$77k-$254k Bankruptcy Attorney Jobs New Jersey (NOW HIRING)",
+          "snippet": "Browse 771 BANKRUPTCY ATTORNEY jobs ($77k-$254k) from companies hiring now. New openings posted daily\u2014find job postings ",
+          "url": "https://www.ziprecruiter.com/Jobs/Bankruptcy-Attorney/--in-New-Jersey"
+        },
+        {
+          "title": "Jobs | GoInhouse.com",
+          "snippet": "Apply now for open Jobs on GoInhouse.com",
+          "url": "https://www.goinhouse.com/jobs/search/bankruptcy-law-jobs"
+        },
+        {
+          "title": "$83k-$274k Bankruptcy Attorney Jobs in New York (NOW HIRING)",
+          "snippet": "Browse 1000+ BANKRUPTCY ATTORNEY jobs ($83k-$274k) from companies hiring now. New openings posted daily\u2014find job posting",
+          "url": "https://www.ziprecruiter.com/Jobs/Bankruptcy-Attorney/--in-New-York"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Best Bankruptcy Lawyers in Los Angeles, CA | Justia Lawyer Directory",
+          "snippet": "Compare top rated bankruptcy attorneys in Los Angeles on the Justia Lawyer Directory. View lawyer ratings, client review",
+          "url": "https://www.justia.com/lawyers/bankruptcy/california/los-angeles",
+          "complaints": []
+        },
+        {
+          "title": "Best Bankruptcy Lawyers near Chino Hills, CA 91709 - Yelp",
+          "snippet": "What are people saying about bankruptcy law services near Chino Hills, CA? This is a review for a bankruptcy law busines",
+          "url": "https://www.yelp.com/search?find_desc=Bankruptcy+Lawyers&find_loc=Chino+Hills%2C+CA+91709",
+          "complaints": []
+        },
+        {
+          "title": "NYC Bankruptcy Lawyer Reviews - David I. Pankin",
+          "snippet": "David and his team are second to none. They made what was a really difficult and embarrassing situation, actually and ea",
+          "url": "https://www.debtlawyer.com/reviews/nyc/",
+          "complaints": []
+        },
+        {
+          "title": "Chino Hills, CA Bankruptcy Law Firms & Lawyers",
+          "snippet": "Find a Chino Hills, CA Bankruptcy lawyer near you today. Compare local California Bankruptcy law firms using our detaile",
+          "url": "https://www.lawyers.com/bankruptcy/chino-hills/california/law-firms/",
+          "complaints": []
+        },
+        {
+          "title": "Best bankruptcy attorney near Chino Hills, CA - Yelp",
+          "snippet": "What are people saying about bankruptcy law services near Chino Hills, CA? This is a review for a bankruptcy law busines",
+          "url": "https://www.yelp.com/search?find_desc=bankruptcy+attorney&find_loc=Chino+Hills%2C+CA",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 3769,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "bookkeepingcampbellb": {
+      "id": "bookkeepingcampbellb",
+      "name": "Bookkeeping- Campbell Bookkeeping Solutions",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 54,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "hiring for an automatable role (+25)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "campbellbks.com",
+      "first_seen": "2026-06-21T09:48:34.635786+00:00",
+      "last_seen": "2026-07-30T13:00:38.471163+00:00",
+      "phones_anonymized": [
+        "(951) 555-01119",
+        "(951) 555-01120",
+        "(951) 555-01121"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "campbellbks.com"
+      ],
+      "hiring_role_match": true,
+      "hiring_signals": [
+        {
+          "title": "Bookkeeper Job Opening | Bookkeeping Employment Opportunities Page | A",
+          "snippet": "Looking for a Flexible Bookkeeping Job in Campbell, CA? Great team to work with! Email Resume Today.",
+          "url": "https://www.areliableservices.com/Bookkeeping-Employment-Opportunities.php"
+        },
+        {
+          "title": "$20-$30/hr Bookkeeping Jobs Murrieta, CA (NOW HIRING) - ZipRecruiter",
+          "snippet": "Browse 283 MURRIETA, CA BOOKKEEPING jobs ($20-$30/hr) hiring now. New openings posted daily. Apply early, get seen first",
+          "url": "https://www.ziprecruiter.com/Jobs/Bookkeeping/-in-Murrieta,CA"
+        },
+        {
+          "title": "Campbell business solutions is hiring for... Jobs - Jobfound",
+          "snippet": "Find Campbell business solutions is hiring for... jobs in USA, UK, and remote positions. Apply now on Jobfound!",
+          "url": "https://jobfound.org/job/campbell-business-solutions-is-hiring-for-juniororentry-level-bookkeeper-or-remote-graduate-engineer-trainee"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "A RELIABLE BOOKKEEPING SERVICE - Updated April 2026 - 12 Photos - 1790",
+          "snippet": "Specialties: A Reliable Bookkeeping Service specializes in the use of the QuickBooks accounting program exclusively and ",
+          "url": "https://www.yelp.com/biz/a-reliable-bookkeeping-service-campbell-3",
+          "complaints": []
+        },
+        {
+          "title": "Best 30 Bookkeeping in Campbell, CA with Reviews | The Real Yellow Pag",
+          "snippet": "Bookkeeping in Campbell on YP.com. See reviews, photos, directions, phone numbers and more for the best Bookkeeping in C",
+          "url": "https://www.yellowpages.com/campbell-ca/bookkeeping",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Bookkeeping near Campbell, CA - Updated 2026 - Yelp",
+          "snippet": "Top 10 Best Bookkeeping in Campbell, CA - November 2024 - Yelp - RC Blackwell's Tax Service, Thai T. Nguyen, CPA, Accoun",
+          "url": "https://www.yelp.com/search?find_desc=bookkeeping&find_loc=Campbell%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Best 30 Accounting Services in Campbell, CA with Reviews | The Real Ye",
+          "snippet": "From Business: A Reliable Bookkeeping Service specializes in the use of the QuickBooks accounting program exclusively an",
+          "url": "https://www.yellowpages.com/campbell-ca/accounting-services",
+          "complaints": []
+        },
+        {
+          "title": "The 10 Best Bookkeeping Services for 2026 | Free Buyers Guide",
+          "snippet": "2026 Bookkeeping Service Reviews What is the Best Bookkeeping Service? Are you a small business owner juggling countless",
+          "url": "https://www.topconsumerreviews.com/best-bookkeeping-services/detailed-reviews.php",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress",
+        "words": 1252,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "carpetcleaninginranc": {
+      "id": "carpetcleaninginranc",
+      "name": "Carpet Cleaning in Rancho",
+      "trade": "Carpet Cleaning",
+      "tier": "Cold",
+      "score": 23,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "appointment trade \u2014 budget proxy (+5)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "spikercarpetandtilecare.com/carpet-cleaning-in-rancho-murieta-ca",
+      "first_seen": "2026-07-30T05:00:24.256588+00:00",
+      "last_seen": "2026-07-30T05:00:24.256588+00:00",
+      "phones_anonymized": [
+        "(951) 555-01122",
+        "(951) 555-01123",
+        "(951) 555-01124"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "spikercarpetandtilecare.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no booking system",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Custom",
+        "words": 4959,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/Sacramentocarpetcleaning/",
+          "https://www.youtube.com/@spikercarpetandtilecare7655"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "consultatechautomoti": {
+      "id": "consultatechautomoti",
+      "name": "Consult-A-Tech Automotive Specialist",
+      "trade": "Auto Repair",
+      "tier": "Cold",
+      "score": 13,
+      "reasons": [
+        "appointment trade \u2014 budget proxy (+5)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "consult-a-tech.com",
+      "first_seen": "2026-07-29T21:00:10.630753+00:00",
+      "last_seen": "2026-07-29T21:00:10.630753+00:00",
+      "phones_anonymized": [
+        "(951) 555-01125",
+        "(951) 555-01126",
+        "(951) 555-01127"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "consult-a-tech.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Custom",
+        "words": 2406,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "davekirbyinsuranceag": {
+      "id": "davekirbyinsuranceag",
+      "name": "Dave Kirby Insurance Agency",
+      "trade": "Insurance",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "davekirbyinsurance.com",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01128",
+        "(951) 555-01129",
+        "(951) 555-01130"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "davekirbyinsurance.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Join Our Team - Kirby Insurance",
+          "snippet": "For nearly a century, the team at Kirby Insurance has provided extraordinary service to our valued clients. At Kirby Ins",
+          "url": "https://kirbyins.com/about-our-agency/join-our-team/"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "DAVE KIRBY - MERCURY INSURANCE AUTHORIZED AGENT - Updated July 2026 - ",
+          "snippet": "6 reviews of DAVE KIRBY - MERCURY INSURANCE AUTHORIZED AGENT \"Really pleased with Kirby insurance ! They found ways to s",
+          "url": "https://www.yelp.com/biz/dave-kirby-mercury-insurance-authorized-agent-murrieta",
+          "complaints": []
+        },
+        {
+          "title": "Dave Kirby Insurance Agency | Menifee California",
+          "snippet": "Need Auto Insurance, Home Insurance, Life Insurance in Murrieta? Dave Kirby Insurance Agency is rated 3.7 stars by local",
+          "url": "https://www.menifeecalifornia.com/businesses/dave-kirby-insurance-agency/",
+          "complaints": []
+        },
+        {
+          "title": "Dave Kirby Insurance Agency in Murrieta, CA 92563 - 951-304...",
+          "snippet": "Dave Kirby Insurance Agency located at 29995 Technology Dr, Murrieta, CA 92563 - reviews, ratings, hours, phone number, ",
+          "url": "https://www.chamberofcommerce.com/business-directory/california/murrieta/insurance-agency/2002534484-dave-kirby-insurance-agency",
+          "complaints": []
+        },
+        {
+          "title": "Dave Kirby Insurance Agency | Local agents in Murrieta, CA | Liberty M",
+          "snippet": "Let the expert agents at Dave Kirby Insurance Agency personalize coverage for your needs. Customize auto, home, renters ",
+          "url": "https://agents.libertymutual.com/find-an-agent/state/california/murrieta/dave-kirby-insurance-agency_cl_3787316507",
+          "complaints": []
+        },
+        {
+          "title": "Dave Kirby Insurance Agency Insurance Agency in Murrieta, CA",
+          "snippet": "Dave Kirby Insurance Agency in Murrieta, CA. \u2b50 3.7/5 (3 reviews). See its address and phone number. Read genuine custome",
+          "url": "https://localitybiz.com/32214904/dave-kirby-insurance-agency-murrieta",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Custom",
+        "words": 1220,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "employmentcreditmili": {
+      "id": "employmentcreditmili",
+      "name": "Employment, Credit, & Military Deferment",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 41,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "temeculaconsumerattorneys.com",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01131",
+        "(951) 555-01132",
+        "(951) 555-01133",
+        "(951) 555-01134"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example",
+        "contact1@anonymized.example"
+      ],
+      "own_domains": [
+        "temeculaconsumerattorneys.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Deferment and Forbearance: Military Service Members - Purefy",
+          "snippet": "To find out if your lender offers deferments for military service members or veterans, contact the lender\u2019s customer ser",
+          "url": "https://www.purefy.com/learn/deferment-forbearance-military-service-members",
+          "complaints": []
+        },
+        {
+          "title": "Veterans, active duty can take advantage of Public Service Loan Forgiv",
+          "snippet": "Spent over an hour with the people with https://studentaid.gov people stating that if you were in the military before 20",
+          "url": "https://news.va.gov/99648/veterans-active-duty-can-take-advantage-of-public-service-loan-forgiveness-program/",
+          "complaints": []
+        },
+        {
+          "title": "Military Benefits",
+          "snippet": "Make interest payments, even if you have military deferment available to you. This will keep your balance from increasin",
+          "url": "https://www.mohela.com/DL/resourceCenter/MilitaryBenefits.aspx",
+          "complaints": []
+        },
+        {
+          "title": "Aidvantage - Federal student loan repayment options",
+          "snippet": "General Forbearance If you're having trouble making student loan payments because of economic difficulties, change in em",
+          "url": "https://aidvantage.studentaid.gov/in-repayment/federal-options",
+          "complaints": []
+        },
+        {
+          "title": "PROTECTING MILITARY BORROWERS How the Department of Education Can Rest",
+          "snippet": "As part of this investigation, the SBPC reviewed data from the Department \u00b7 of Education (ED) related to submitted Emplo",
+          "url": "https://protectborrowers.org/wp-content/uploads/2020/11/Protecting-Military-Borrowers_SBPC.pdf",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "WordPress",
+        "words": 2238,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/TemeculaConsumerAttorneys",
+          "https://www.linkedin.com/company/17888726/"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "fixrightroofinginc": {
+      "id": "fixrightroofinginc",
+      "name": "FixRight Roofing INC.",
+      "trade": "Roofing",
+      "tier": "Cold",
+      "score": 16,
+      "reasons": [
+        "multi-location / multi-phone (+8)",
+        "website score 2/5 (+8)"
+      ],
+      "url": "fixrightroofing.com",
+      "first_seen": "2026-07-29T13:00:56.235517+00:00",
+      "last_seen": "2026-07-29T13:00:56.235517+00:00",
+      "phones_anonymized": [
+        "(951) 555-01135",
+        "(951) 555-01136",
+        "(951) 555-01137"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "fixrightroofing.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 2,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no contact page",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Wix",
+        "words": 2285,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "fullserviceaccountin": {
+      "id": "fullserviceaccountin",
+      "name": "Full Service Accounting Firm",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "website score 2/5 (+8)"
+      ],
+      "url": "swensonadvisors.com",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01138"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "swensonadvisors.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$69k-$175k Full Time Public Accounting Firm Jobs (NOW HIRING)",
+          "snippet": "Browse 121,713 FULL TIME PUBLIC ACCOUNTING FIRM jobs ($69k-$175k) from companies near you with job openings that are hir",
+          "url": "https://www.ziprecruiter.com/Jobs/Full-Time-Public-Accounting-Firm"
+        },
+        {
+          "title": "Accounting Firm Jobs - Tax Associate Openings - Jacksonville CPA Firm",
+          "snippet": "View our current accounting firm job openings below and use the form at the bottom of the page to apply. Full-time posit",
+          "url": "https://financialsolutionadvisors.com/careers/"
+        },
+        {
+          "title": "Careers at Professional Financial Services Firms",
+          "snippet": "Professional services encompass a wide range of finance and banking jobs, such as public accounting, management consulti",
+          "url": "https://corporatefinanceinstitute.com/resources/career-map/service-firms/"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Best Accounting Companies - 2026 Reviews | Goodfirms",
+          "snippet": "Our aim is to make accounting simple, clear, and stress-free, helping clients stay compliant with HMRC while keeping the",
+          "url": "https://www.goodfirms.co/business-services/accounting",
+          "complaints": []
+        },
+        {
+          "title": "Top Accountants and Accounting Firms - Jul 2026 Rankings | Clutch.co",
+          "snippet": "We verify reviews and evaluate companies so you can choose with confidence. We may earn a fee for some placements. Learn",
+          "url": "https://clutch.co/accounting",
+          "complaints": []
+        },
+        {
+          "title": "Top Accountants in Louisville, KY 2026 List - Bluegrass Professional A",
+          "snippet": "Clients in multiple reviews mentioned the firm\u2019s \u201cpersonalized attention and peace of mind,\u201d with several reporting thou",
+          "url": "https://bpa.tax/top-6-accountants-in-louisville/",
+          "complaints": []
+        },
+        {
+          "title": "Best Accounting Firms Near Me - July 2026: Find Nearby ... - Yelp",
+          "snippet": "Find the best Accounting Firms near you on Yelp - see all Accounting Firms open now.Explore other popular Professional S",
+          "url": "https://www.yelp.com/nearme/accounting-firms",
+          "complaints": []
+        },
+        {
+          "title": "Top Accounting Firms in Los Angeles - 2026 Reviews | Goodfirms",
+          "snippet": "Looking for the best accounting companies in Los Angeles? Here are the top listed accounting firms providing the best bu",
+          "url": "https://www.goodfirms.co/business-services/accounting/los-angeles",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 2,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "not mobile-responsive",
+          "no CRM"
+        ],
+        "platform": "Custom",
+        "words": 271,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [
+          "Constant Contact"
+        ],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "guardianplumbersisyo": {
+      "id": "guardianplumbersisyo",
+      "name": "Guardian Plumbers is Your Local Plumbing Company",
+      "trade": "Plumbing",
+      "tier": "Cold",
+      "score": 23,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "appointment trade \u2014 budget proxy (+5)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "guardianplumbers.com",
+      "first_seen": "2026-07-06T21:00:16.153639+00:00",
+      "last_seen": "2026-07-31T05:00:06.969344+00:00",
+      "phones_anonymized": [
+        "(951) 555-01139",
+        "(951) 555-01140",
+        "(951) 555-01141"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example",
+        "contact1@anonymized.example"
+      ],
+      "own_domains": [
+        "guardianplumbers.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no booking system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress",
+        "words": 8781,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/guardianplumbers/",
+          "https://twitter.com/GuardianPlumber",
+          "https://www.instagram.com/guardian_plumbers/?igshid=oqj6jfrvaaoq",
+          "https://www.pinterest.com/guardianplumbers/",
+          "https://www.yelp.com/biz/guardian-plumbing-wildomar-3",
+          "https://www.yelp.com/biz/guardian-plumbers-temecula-7"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "handyman": {
+      "id": "handyman",
+      "name": "Handyman",
+      "trade": "Handyman",
+      "tier": "Cold",
+      "score": 13,
+      "reasons": [
+        "appointment trade \u2014 budget proxy (+5)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "thetoolboxpro.com/handyman-in-temecula-ca",
+      "first_seen": "2026-07-20T05:00:18.700046+00:00",
+      "last_seen": "2026-08-03T05:00:22.517839+00:00",
+      "phones_anonymized": [
+        "(951) 555-01142",
+        "(951) 555-01143",
+        "(951) 555-01144"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "thetoolboxpro.com",
+        "repairhero.us"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 11246,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Analytics",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/profile.php?id=61556763320582",
+          "https://www.instagram.com/thetoolboxpro/",
+          "https://www.youtube.com/@handyman-chandler",
+          "https://www.google.com/maps/place/The+Toolbox+Pro+Handyman+LLC",
+          "https://g.page/r/CVEtdEgZBAPwEBE/review"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "handymanservice": {
+      "id": "handymanservice",
+      "name": "Handyman Service",
+      "trade": "Handyman",
+      "tier": "Cold",
+      "score": 23,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "appointment trade \u2014 budget proxy (+5)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "zomgthehandyman.com/handyman/temecula",
+      "first_seen": "2026-07-03T21:00:13.393999+00:00",
+      "last_seen": "2026-08-03T05:00:22.517839+00:00",
+      "phones_anonymized": [
+        "(951) 555-01145",
+        "(951) 555-01146",
+        "(951) 555-01147"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "zomgthehandyman.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no booking system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 5071,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Analytics",
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/zomgthehandyman",
+          "https://www.instagram.com/zomgthehandyman",
+          "https://www.youtube.com/@zomgthehandyman",
+          "https://x.com/zomgthehandyman",
+          "https://www.linkedin.com/company/zomgthehandyman",
+          "https://www.pinterest.com/zomgthehandyman"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "handymanservicesteme": {
+      "id": "handymanservicesteme",
+      "name": "Handyman Services Temecula Murrieta Hemet",
+      "trade": "Handyman",
+      "tier": "Cold",
+      "score": 23,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "appointment trade \u2014 budget proxy (+5)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "jcappservices.com",
+      "first_seen": "2026-07-30T05:00:24.256588+00:00",
+      "last_seen": "2026-07-30T05:00:24.256588+00:00",
+      "phones_anonymized": [
+        "(951) 555-01148",
+        "(951) 555-01149",
+        "(951) 555-01150",
+        "(951) 555-01151"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "jcappservices.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 3418,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Analytics",
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "homeautobusinessandr": {
+      "id": "homeautobusinessandr",
+      "name": "home, auto, business and renters insurance",
+      "trade": "Insurance",
+      "tier": "Warm",
+      "score": 54,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "hiring for an automatable role (+25)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "agent.travelers.com/ca/murrieta",
+      "first_seen": "2026-06-21T09:48:34.635786+00:00",
+      "last_seen": "2026-08-03T13:00:40.873374+00:00",
+      "phones_anonymized": [
+        "(951) 555-01152",
+        "(951) 555-01153",
+        "(951) 555-01154",
+        "(951) 555-01155",
+        "(951) 555-01156",
+        "(951) 555-01157"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "agent.travelers.com"
+      ],
+      "hiring_role_match": true,
+      "hiring_signals": [
+        {
+          "title": "$33k-$168k Work From Home Auto Insurance Jobs (NOW HIRING)",
+          "snippet": "Work from home auto insurance jobs include roles in customer service and sales. Instead of working in the office or a ca",
+          "url": "https://www.ziprecruiter.com/Jobs/Work-From-Home-Auto-Insurance"
+        },
+        {
+          "title": "Insurance Careers at USAA",
+          "snippet": "Assist members with financial planning and life insurance policies. ... Assist members with their auto, home, and renter",
+          "url": "https://www.usaajobs.com/insurance-careers"
+        },
+        {
+          "title": "Career Opportunities - Auto-Owners Insurance",
+          "snippet": "Choose from a wide variety of career paths including underwriting, claims, IT, accounting, actuarial, marketing, legal a",
+          "url": "https://www.auto-owners.com/about/career-opportunities"
+        },
+        {
+          "title": "$46k-$144k Remote Auto Insurance Jobs (NOW HIRING) Mar 2026",
+          "snippet": "... Remote P&C Licensed Insurance Agent Sales & Production Quote, present, and ... bind Auto, Home, Renters, and related",
+          "url": "https://www.ziprecruiter.com/Jobs/Remote-Auto-Insurance"
+        },
+        {
+          "title": "$17-$22/hr Homeowners Insurance Jobs in Texas (NOW HIRING)",
+          "snippet": "Acquire new clients for our insurance agency by selling Auto, Homeowners, Renters, and Life insurance, along with other ",
+          "url": "https://www.ziprecruiter.com/Jobs/Homeowners-Insurance/--in-Texas"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "8 Best Home and Auto Insurance Bundles for 2026 - NerdWallet",
+          "snippet": "Amica, State Farm and USAA had the highest combined star ratings from NerdWallet for homeowners and auto insurance. Howe",
+          "url": "https://www.nerdwallet.com/insurance/homeowners/best-home-auto-insurance-bundles",
+          "complaints": []
+        },
+        {
+          "title": "Auto-Owners Homeowners Insurance Review for 2026 | U.S. News",
+          "snippet": "Homeowners policies generally cover damage from fire and smoke, though each policy and claim will be handled differently",
+          "url": "https://www.usnews.com/insurance/homeowners-insurance/auto-owners-insurance",
+          "complaints": []
+        },
+        {
+          "title": "Auto-Owners Homeowners Insurance Reviews & Complaints",
+          "snippet": "It has taken her 12 weeks just to call our painting contractor after submitting an estimate only for her to authorize on",
+          "url": "https://www.consumeraffairs.com/insurance/auto-owners-homeowners.htm",
+          "complaints": []
+        },
+        {
+          "title": "Auto-Owners Insurance: User Reviews and Quotes (2026) | Insurify",
+          "snippet": "",
+          "url": "https://insurify.com/car-insurance/companies/auto-owners/",
+          "complaints": []
+        },
+        {
+          "title": "State Farm Insurance Reviews (2026): 3,300+ User Ratings",
+          "snippet": "Overall, State Farm\u2019s homeowners and renters insurance policies are affordable and provide dependable coverage. Yes, Sta",
+          "url": "https://wallethub.com/profile/ci/statefarm-13017237i",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools",
+          "thin content (119w)"
+        ],
+        "platform": "Custom",
+        "words": 119,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Analytics"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "homerepairsnear": {
+      "id": "homerepairsnear",
+      "name": "Home Repairs Near",
+      "trade": "Handyman",
+      "tier": "Unverified",
+      "score": 5,
+      "reasons": [
+        "site bot-protected (+5)",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "jcshandyman.com",
+      "first_seen": "2026-07-30T05:00:24.256588+00:00",
+      "last_seen": "2026-07-30T05:00:24.256588+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "jcshandyman.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "blocked",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "bot-protected \u2014 can't verify"
+        ],
+        "platform": "Unknown",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "homeyou": {
+      "id": "homeyou",
+      "name": "homeyou",
+      "trade": "Tree Service",
+      "tier": "Cold",
+      "score": 8,
+      "reasons": [
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "homeyou.com/ca/tree-service-temecula-costs",
+      "first_seen": "2026-07-03T13:17:34.282299+00:00",
+      "last_seen": "2026-07-31T21:00:35.797684+00:00",
+      "phones_anonymized": [
+        "(951) 555-01158",
+        "(951) 555-01159",
+        "(951) 555-01160"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "homeyou.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no booking system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 1268,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/teamhomeyou",
+          "https://x.com/teamhomeyou",
+          "https://www.linkedin.com/company/homeyou"
+        ]
+      },
+      "archetype": "false_positive"
+    },
+    "hrsscorp": {
+      "id": "hrsscorp",
+      "name": "HRSS Corp",
+      "trade": "Recruiting",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "hrsscorp.com",
+      "first_seen": "2026-07-06T13:00:00.566433+00:00",
+      "last_seen": "2026-07-06T13:00:00.566433+00:00",
+      "phones_anonymized": [
+        "(951) 555-01161",
+        "(951) 555-01162",
+        "(951) 555-01163"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "hrsscorp.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "HRSS, LLP Reviews (16): Pros & Cons of Working At HRSS, LLP | Glassdoo",
+          "snippet": "HRSS, LLP has an employee rating of 3.6 out of 5 stars, based on 16 company reviews on Glassdoor which indicates that mo",
+          "url": "https://www.glassdoor.com/Reviews/HRSS-LLP-Reviews-E612397.htm",
+          "complaints": []
+        },
+        {
+          "title": "Hess Corporation Reviews in US | Glassdoor",
+          "snippet": "328 Hess Corporation reviews in US. A free inside look at company reviews and salaries posted anonymously by employees.",
+          "url": "https://www.glassdoor.com/Reviews/Hess-Corporation-US-Reviews-EI_IE30.0,16_IL.17,19_IN1.htm",
+          "complaints": []
+        },
+        {
+          "title": "What are the cons of working at HRS Group according to real employee r",
+          "snippet": "\"Bad management\" ((in 21 reviews)); \"no chance for payrise, low salaries\" ((in 13 reviews)); \"8. Managers expect employe",
+          "url": "https://www.glassdoor.com/Reviews/HRS-Group-Reviews-E489930.htm",
+          "complaints": []
+        },
+        {
+          "title": "HRSS, LLP Reviews in Houston | Glassdoor",
+          "snippet": "10 HRSS, LLP reviews in Houston. A free inside look at company reviews and salaries posted anonymously by employees.",
+          "url": "https://www.glassdoor.com/Reviews/HRSS-LLP-Houston-Reviews-EI_IE612397.0,8_IL.9,16_IM394.htm",
+          "complaints": []
+        },
+        {
+          "title": "hrsscorp.com Reviews: Is this site a scam or legit?",
+          "snippet": "Safe Check We want our trust scores and reviews to be as accurate as possible so that you can protect yourself from onli",
+          "url": "https://www.scam-detector.com/validator/hrsscorp-com-review/",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "GoDaddy",
+        "words": 3209,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "jameshhoulecpa": {
+      "id": "jameshhoulecpa",
+      "name": "James H. Houle, CPA",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 41,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "jameshoulecpa.com",
+      "first_seen": "2026-06-21T09:48:34.635786+00:00",
+      "last_seen": "2026-08-03T13:00:40.873374+00:00",
+      "phones_anonymized": [
+        "(951) 555-01164",
+        "(951) 555-01165",
+        "(951) 555-01166"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "jameshoulecpa.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "JAMES H. HOULE, CPA - Updated June 2026 - 24973 Washington Ave, Murrie",
+          "snippet": "Specialties: James H. Houle, CPA provides accounting services, business consulting services, CFO services, and tax prepa",
+          "url": "https://www.yelp.com/biz/james-h-houle-cpa-murrieta",
+          "complaints": []
+        },
+        {
+          "title": "Houle James H CPA - James H. Houle, CPA in Murrieta, CA \u2013 Reviews, Hou",
+          "snippet": "I highly recommend James! Great guy! Great CPA! Very personable and knowledgeable. Location is great.More ... Great guy.",
+          "url": "https://local.yahoo.com/info-20995097-houle-james-h-cpa-james-h-houle-cpa-murrieta/",
+          "complaints": []
+        },
+        {
+          "title": "HOULE J JAMES CPA - Updated May 2026 - 438 E Katella Ave, Orange, Cali",
+          "snippet": "1 review of HOULE J JAMES CPA \"Professional and always there to help I have recommended Jim to family and friends and th",
+          "url": "https://www.yelp.com/biz/houle-j-james-cpa-orange",
+          "complaints": []
+        },
+        {
+          "title": "James H. Houle, CPA - Orange CA Tax Preparer",
+          "snippet": "Tax preparer information, client reviews and ratings of James H. Houle, CPA from Orange CA in the national directory of ",
+          "url": "https://www.ptindirectory.com/tax-preparers/california/orange-ca/373757/james-h-houle-cpa/james-h-houle-cpa",
+          "complaints": []
+        },
+        {
+          "title": "James H. Houle, CPA, 41185 Golden Gate Cir, Ste 107, Murrieta, CA 9256",
+          "snippet": "I highly recommend James! Great guy! Great CPA! Very personable and knowledgeable. Location is great. ... Great guy. Sup",
+          "url": "https://www.mapquest.com/us/california/james-h-houle-cpa-372169804",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 2761,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "jobstemecula": {
+      "id": "jobstemecula",
+      "name": "Jobs Temecula",
+      "trade": "Recruiting",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "jobstemecula.com",
+      "first_seen": "2026-07-10T21:00:24.576965+00:00",
+      "last_seen": "2026-07-10T21:00:24.576965+00:00",
+      "phones_anonymized": [
+        "(951) 555-01167",
+        "(951) 555-01168"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "jobstemecula.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$58k-$66k Part Time Jobs in Temecula, CA (NOW HIRING)",
+          "snippet": "Part-time jobs are positions in which employees work fewer hours per week than full-time employees, typically less than ",
+          "url": "https://www.ziprecruiter.com/Jobs/Part-Time/-in-Temecula,CA"
+        },
+        {
+          "title": "Temecula, CA Jobs Paying $20 - $26 per hour - Now Hiring | Snagajob",
+          "snippet": "Find hourly jobs in Temecula, CA on Snagajob.com. Apply to 255 full-time and part-time jobs, gigs, shifts, local jobs an",
+          "url": "https://www.snagajob.com/find-jobs/w-temecula,+ca"
+        },
+        {
+          "title": "$18-$37/hr Jobs in Temecula, CA (NOW HIRING) Jul 2026",
+          "snippet": "Browse 1000+ TEMECULA, CA jobs ($18-$37/hr) from companies hiring now. New openings posted daily. Apply early, be seen f",
+          "url": "https://www.ziprecruiter.com/Jobs/-in-Temecula,CA"
+        },
+        {
+          "title": "Search Jobs - Temecula - Jobs - Careers at Apple",
+          "snippet": "Explore all Temecula jobs at Apple. Create a profile and apply today.",
+          "url": "https://jobs.apple.com/en-us/search?location=temecula-TMC"
+        },
+        {
+          "title": "Search Temecula Jobs at Kaiser Permanente",
+          "snippet": "Search for available job openings at Kaiser Permanente",
+          "url": "https://www.kaiserpermanentejobs.org/location/temecula-jobs/641/6252001-5332921-5401395/4"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "15,051 Temecula, CA jobs | Glassdoor",
+          "snippet": "barista jobs in Temecula, CATemecula, CA jobsStarbucks jobs in Temecula, CA \u00b7 Starbucks salariesbarista salaries in Teme",
+          "url": "https://www.glassdoor.com/Job/temecula-jobs-SRCH_IL.0,8_IC1147145.htm",
+          "complaints": []
+        },
+        {
+          "title": "What are the pros of working at City of Temecula according to real emp",
+          "snippet": "Get personalized job recommendations and updates by starting your searches. ... City of Temecula has an employee rating ",
+          "url": "https://www.glassdoor.com/Reviews/City-of-Temecula-Reviews-E717118.htm",
+          "complaints": []
+        },
+        {
+          "title": "City Of Temecula Employment and Reviews | SimplyHired",
+          "snippet": "Read City Of Temecula reviews, including information from current and former employees on salaries, benefits, and more. ",
+          "url": "https://www.simplyhired.com/browse-jobs/companies/City-of-Temecula",
+          "complaints": []
+        },
+        {
+          "title": "Top 11770 Jobs in Temecula, Ca | SimplyHired",
+          "snippet": "11770 jobs available in Temecula, Ca. See salaries, compare reviews, easily apply, and get hired. New careers in Temecul",
+          "url": "https://www.simplyhired.com/search?l=temecula%2C+ca",
+          "complaints": []
+        },
+        {
+          "title": "3,935 part time Jobs in Temecula, CA, June 2026 | Glassdoor",
+          "snippet": "technical support jobs in Temecula, CATemecula, CA jobsWhite House Black Market jobs in Temecula, CA \u00b7 White House Black",
+          "url": "https://www.glassdoor.com/Job/temecula-part-time-jobs-SRCH_IL.0,8_IC1147145_KO9,18.htm",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Custom",
+        "words": 869,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "kdainclicensedcpasen": {
+      "id": "kdainclicensedcpasen",
+      "name": "KDA Inc. \u2014 Licensed CPAs & Enrolled Agents",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 41,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "kdainc.com/service-areas/inland-empire/murrieta/cpa-firm",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-08-03T13:00:40.873374+00:00",
+      "phones_anonymized": [
+        "(951) 555-01169",
+        "(951) 555-01170",
+        "(951) 555-01171",
+        "(951) 555-01172"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "kdainc.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "South Pasadena CPA Firm | KDA Inc. \u2014 Licensed CPAs & Enrolled Agents",
+          "snippet": "KDA Inc. \u2014 California\u2019s most trusted tax advisory firm since 1993. Licensed CPAs, Enrolled Agents, and Tax Strategists s",
+          "url": "https://kdainc.com/service-areas/los-angeles-county/south-pasadena/cpa-firm/",
+          "complaints": []
+        },
+        {
+          "title": "KDA - Updated July 2026 - 30 Photos & 68 Reviews - Yelp",
+          "snippet": "Specialties: As an enrolled agent, Karla is licensed to represent taxpayers in all 50 states. Established in 1995. Among",
+          "url": "https://www.yelp.com/biz/kda-la-palma",
+          "complaints": []
+        },
+        {
+          "title": "Palmdale CPA Firm | KDA Inc. \u2014 Licensed CPAs & Enrolled Agents",
+          "snippet": "KDA Inc. \u2014 California\u2019s most trusted tax advisory firm since 1993. Licensed CPAs, Enrolled Agents, and Tax Strategists s",
+          "url": "https://kdainc.com/service-areas/los-angeles-county/palmdale/cpa-firm/",
+          "complaints": []
+        },
+        {
+          "title": "Placentia CPA Firm | KDA Inc. \u2014 Licensed CPAs & Enrolled Agents",
+          "snippet": "KDA Inc. \u2014 California\u2019s most trusted tax advisory firm since 1993. Licensed CPAs, Enrolled Agents, and Tax Strategists s",
+          "url": "https://kdainc.com/service-areas/orange-county/placentia/cpa-firm/",
+          "complaints": []
+        },
+        {
+          "title": "KDA Inc | BBB Reviews | Better Business Bureau",
+          "snippet": "View BBB customer reviews of KDA Inc. Leave a review and share your experience with the BBB and KDA Inc.",
+          "url": "https://www.bbb.org/us/ca/la-palma/profile/accounting/kda-inc-1126-1000062982/customer-reviews",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 3079,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager",
+          "Facebook Pixel"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.linkedin.com/in/kenneth-dennis",
+          "https://www.youtube.com/@KarltonDennis"
+        ]
+      },
+      "archetype": "contact_worthy"
+    },
+    "lawlink": {
+      "id": "lawlink",
+      "name": "LawLink",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "lawlink.com/listings/attorneys/state/ca/city/murrieta",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01173",
+        "(951) 555-01174",
+        "(951) 555-01175"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "lawlink.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Lawlink Reviews: Pros And Cons of Working At Lawlink | Glassdoor",
+          "snippet": "Glassdoor has 3 Lawlink reviews submitted anonymously by Lawlink employees.",
+          "url": "https://www.glassdoor.com/Reviews/Lawlink-Reviews-E3347475.htm?filter.overallRating=ONE",
+          "complaints": []
+        },
+        {
+          "title": "LawLink Reviews and Pricing 2026 | F6S",
+          "snippet": "LawLink reviews, pricing and more with discounts and Online Legal Support alternatives. LawLink is a Saudi online platfo",
+          "url": "https://www.f6s.com/software/lawlink",
+          "complaints": []
+        },
+        {
+          "title": "LawLink - Apps on Google Play",
+          "snippet": "Lawyer Profile and Review System Build credibility with history, experience, and user reviews. Secure Data Storage Prior",
+          "url": "https://play.google.com/store/apps/details?id=com.palmlaw.app",
+          "complaints": []
+        },
+        {
+          "title": "lawlink.com Reviews | check if site is scam or legit| Scamadviser",
+          "snippet": "Check lawlink.com with our free review tool and find out if lawlink.com is legit and reliable. Need advice? Report scams",
+          "url": "https://www.scamadviser.com/check-website/lawlink.com",
+          "complaints": []
+        },
+        {
+          "title": "Lawline Reviews | Read Customer Service Reviews of lawline.com",
+          "snippet": "Review summary Created with AI, based on recent reviews Evaluating 187 reviews, reviewers overwhelmingly had a great exp",
+          "url": "https://www.trustpilot.com/review/lawline.com",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Custom",
+        "words": 2740,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "manageditservicestem": {
+      "id": "manageditservicestem",
+      "name": "Managed IT Services Temecula",
+      "trade": "Consulting",
+      "tier": "Unverified",
+      "score": 3,
+      "reasons": [
+        "site appears down (+3)",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "temeculamanageditservices.com/about-us",
+      "first_seen": "2026-07-28T21:00:30.101368+00:00",
+      "last_seen": "2026-07-28T21:00:30.101368+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "temeculamanageditservices.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "down",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "near-empty page"
+        ],
+        "platform": "N/A",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "maximizeyourrentalre": {
+      "id": "maximizeyourrentalre",
+      "name": "Maximize Your Rental Returns",
+      "trade": "Property Management",
+      "tier": "Warm",
+      "score": 41,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "robertcoleproperties.com",
+      "first_seen": "2026-07-22T21:00:11.154047+00:00",
+      "last_seen": "2026-07-22T21:00:11.154047+00:00",
+      "phones_anonymized": [
+        "(951) 555-01176",
+        "(951) 555-01177",
+        "(951) 555-01178"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "robertcoleproperties.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Maximizing Rental Returns: A Comprehensive Guide for Property Owners",
+          "snippet": "Review Rental Rates Regularly: Periodically review rental rates to ensure they're in line with market conditions and pro",
+          "url": "https://www.qterrapropertymanagement.com/post/maximizing-rental-returns-a-comprehensive-guide-for-property-owners",
+          "complaints": []
+        },
+        {
+          "title": "How to Maximize Your Rental Property Rate of Return",
+          "snippet": "Maximize your rental property ROI by understanding key calculations, factors affecting returns, and the importance of re",
+          "url": "https://www.dealmachine.com/blog/maximize-rental-property-rate-of-return",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no booking system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 607,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://rcp.appfolio.com"
+        ]
+      },
+      "archetype": "contact_worthy"
+    },
+    "mbcconsultinginc": {
+      "id": "mbcconsultinginc",
+      "name": "MBC Consulting Inc",
+      "trade": "Consulting",
+      "tier": "Warm",
+      "score": 49,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "single complaint mention \u2014 needs corroboration to score",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "allbiz.com/business/mbc-consulting-inc_2q",
+      "first_seen": "2026-07-06T13:00:00.566433+00:00",
+      "last_seen": "2026-07-14T21:00:23.921381+00:00",
+      "phones_anonymized": [
+        "(951) 555-01179",
+        "(951) 555-01180",
+        "(951) 555-01181",
+        "(951) 555-01182",
+        "(951) 555-01183"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "allbiz.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Join Our Team - MBC - Morgan Business Consulting",
+          "snippet": "As an Equal Employment Opportunity / Affirmative Action employer, MBC is dedicated to making all employment decisions wi",
+          "url": "https://morganbusinessconsulting.com/join-our-team/"
+        }
+      ],
+      "review_negative": true,
+      "review_signals": [
+        {
+          "title": "MBC Consulting, Inc. | BBB Business Profile | Better Business Bureau",
+          "snippet": "Not BBB Accredited. Tax Return Preparation in Murrieta, CA. See BBB rating, reviews, complaints, and more.",
+          "url": "https://www.bbb.org/us/ca/murrieta/profile/tax-return-preparation/mbc-consulting-inc-1126-850063942",
+          "complaints": []
+        },
+        {
+          "title": "MBC Consulting, Inc. | BBB Reviews | Better Business Bureau",
+          "snippet": "View BBB customer reviews of MBC Consulting, Inc.. Leave a review and share your experience with the BBB and MBC Consult",
+          "url": "https://www.bbb.org/us/ca/murrieta/profile/tax-return-preparation/mbc-consulting-inc-1126-850063942/customer-reviews",
+          "complaints": []
+        },
+        {
+          "title": "Mbc Consulting Inc - Murrieta, CA 92562 - The Real Yellow Pages",
+          "snippet": "Get reviews, hours, directions, coupons and more for Mbc Consulting Inc. Search for other Business Coaches & Consultants",
+          "url": "https://www.yellowpages.com/murrieta-ca/mip/mbc-consulting-inc-519800768",
+          "complaints": []
+        },
+        {
+          "title": "Working at Morgan Business Consulting (MBC) LLC: Employee Reviews | In",
+          "snippet": "What is the work environment and culture...Show more ... Great management, flexible work hours, excellent learning oppor",
+          "url": "https://www.indeed.com/cmp/Morgan-Business-Consulting-(mbc)-LLC/reviews",
+          "complaints": [
+            "slow"
+          ]
+        },
+        {
+          "title": "Mbc Consulting Inc in Murrieta , CA - superpages.com",
+          "snippet": "Get reviews, hours, directions, coupons and more for Mbc Consulting Inc. Search for other Business Coaches & Consultants",
+          "url": "https://www.superpages.com/murrieta-ca/bpp/mbc-consulting-inc-519800768",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Custom",
+        "words": 1208,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "muriettacriminaldefe": {
+      "id": "muriettacriminaldefe",
+      "name": "Murietta Criminal Defense Lawyer",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 41,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "jpozzalaw.com",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01184",
+        "(951) 555-01185",
+        "(951) 555-01186",
+        "(951) 555-01187"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "jpozzalaw.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Top Rated Murrieta, CA Criminal Defense Lawyers - Avvo.com",
+          "snippet": "FREE detailed reports on 62 Criminal Defense Attorneys in Murrieta, California. Find 976 reviews, disciplinary sanctions",
+          "url": "https://www.avvo.com/criminal-defense-lawyer/ca/murrieta.html",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Criminal Defense Attorney in Murrieta, CA - Yelp",
+          "snippet": "What are people saying about criminal defense law services in Murrieta, CA? This is a review for a criminal defense law ",
+          "url": "https://www.yelp.com/search?find_desc=Criminal+Defense+Attorney&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "3 Best Criminal Defense Lawyers in Murrieta, CA",
+          "snippet": "Expert recommended Top 3 Criminal Defense Lawyers in Murrieta, CA. How do we actually find? ThreeBestRated.com 50-Point ",
+          "url": "https://threebestrated.com/criminal-defense-lawyers-in-murrieta-ca",
+          "complaints": []
+        },
+        {
+          "title": "THE BEST 10 CRIMINAL DEFENSE LAW IN MURRIETA, CA - Yelp",
+          "snippet": "Top 10 Best Criminal Defense Law Near Murrieta, California - With Real Reviews",
+          "url": "https://www.yelp.com/search?cflt=criminaldefense&find_loc=Murrieta,%20CA",
+          "complaints": []
+        },
+        {
+          "title": "Best Criminal Lawyers in Murrieta, CA | Justia Lawyer Directory",
+          "snippet": "Compare top rated criminal attorneys in Murrieta on the Justia Lawyer Directory. View lawyer ratings, client reviews, aw",
+          "url": "https://www.justia.com/lawyers/criminal-law/california/murrieta",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "Custom",
+        "words": 3642,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "murrietacaattorneydi": {
+      "id": "murrietacaattorneydi",
+      "name": "Murrieta, CA Attorney Directory: lawyers, law firms, attorneys ...",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "attorneyhelp.org/attorneys/ca_murrieta_lawyers.html",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01188",
+        "(951) 555-01189",
+        "(951) 555-01190"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "attorneyhelp.org"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Best Lawyers in Murrieta, CA | Justia Lawyer Directory",
+          "snippet": "Free Consultation Criminal, DUI, Domestic Violence and White Collar Crime University of San Diego School of Law and Univ",
+          "url": "https://www.justia.com/lawyers/california/murrieta",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Lawyers in Murrieta, CA - Updated 2026 - Quality ... - Yel",
+          "snippet": "Top 10 Best lawyers with Reviews and Photos Near Murrieta, California - Near You",
+          "url": "https://www.yelp.com/search?find_desc=lawyers&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Murrieta, CA, Attorneys Near Me | Find Top Law Firms",
+          "snippet": "There are 873 lawyers and Law Firms in Murrieta. Browse our pages to compare their experience, reviews, and ratings, and",
+          "url": "https://www.martindale.com/all-lawyers/murrieta/california/",
+          "complaints": []
+        },
+        {
+          "title": "THE BEST 10 LAWYERS IN MURRIETA, CA - UPDATED JUNE 2026 - HOURS - YELP",
+          "snippet": "Best Lawyers in Murrieta, CA - Last Updated June 2026 - Singleton Smith Law Offices, Leming Family Law, Ryther Law Group",
+          "url": "https://www.yelp.com/search?cflt=lawyers&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Find Murrieta, CA Attorneys and Law Firms | FindLaw",
+          "snippet": "Find the best lawyers and law firms in Murrieta, California on the FindLaw Lawyer Directory. Browse by legal issue, rati",
+          "url": "https://lawyers.findlaw.com/california/murrieta/",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 3537,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "murrietacalandscapin": {
+      "id": "murrietacalandscapin",
+      "name": "Murrieta CA Landscaping & Hardscape",
+      "trade": "Landscaping",
+      "tier": "Unverified",
+      "score": 3,
+      "reasons": [
+        "site appears down (+3)",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "monarchmld.com/murrieta-landscaping",
+      "first_seen": "2026-07-31T13:00:21.740111+00:00",
+      "last_seen": "2026-07-31T13:00:21.740111+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "monarchmld.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "down",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "near-empty page"
+        ],
+        "platform": "N/A",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "murrietacarpetcleani": {
+      "id": "murrietacarpetcleani",
+      "name": "Murrieta Carpet Cleaning Services",
+      "trade": "Carpet Cleaning",
+      "tier": "Cold",
+      "score": 23,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "appointment trade \u2014 budget proxy (+5)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "macdonaldcarpetcleaning.com/service-area/murrieta-ca",
+      "first_seen": "2026-07-28T05:00:02.436185+00:00",
+      "last_seen": "2026-07-28T05:00:02.436185+00:00",
+      "phones_anonymized": [
+        "(951) 555-01191",
+        "(951) 555-01192",
+        "(951) 555-01193",
+        "(951) 555-01194"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "macdonaldcarpetcleaning.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress",
+        "words": 2684,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/macdonaldcarpetcleaning/",
+          "https://www.instagram.com/macdonaldcarpetcleaning/",
+          "https://www.youtube.com/channel/UCwbaYLp7MKYfzg3JP2CZHYg"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "murrietacommercialpa": {
+      "id": "murrietacommercialpa",
+      "name": "Murrieta Commercial Painting Company & Contractors",
+      "trade": "Painting",
+      "tier": "Cold",
+      "score": 8,
+      "reasons": [
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "sandiegopaintpros.com/murrieta-commercial-painting-company",
+      "first_seen": "2026-07-29T21:00:10.630753+00:00",
+      "last_seen": "2026-07-29T21:00:10.630753+00:00",
+      "phones_anonymized": [
+        "(951) 555-01195",
+        "(951) 555-01196",
+        "(951) 555-01197"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "sandiegopaintpros.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress",
+        "words": 2683,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "murrietalawyers": {
+      "id": "murrietalawyers",
+      "name": "Murrieta Lawyers",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 50,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "hiring for an automatable role (+25)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "lawyerland.com/lawyers/local/murrieta/ca",
+      "first_seen": "2026-07-20T13:00:32.932372+00:00",
+      "last_seen": "2026-07-20T13:00:32.932372+00:00",
+      "phones_anonymized": [
+        "(951) 555-01198",
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "lawyerland.com"
+      ],
+      "hiring_role_match": true,
+      "hiring_signals": [
+        {
+          "title": "Employment Lawyer Jobs in Murrieta, CA (NOW HIRING)",
+          "snippet": "Estate Planning Attorney - Full-time Location: Murrieta, CA Required Qualifications: * J.D. from an ... Competitive comp",
+          "url": "https://www.ziprecruiter.com/Jobs/Employment-Lawyer/-in-Murrieta,CA"
+        },
+        {
+          "title": "$132k-$250k Counsel Lawyer Jobs in Murrieta, CA (NOW HIRING)",
+          "snippet": "Estate Planning Attorney - Full-time Location: Murrieta, CA Required Qualifications: * J.D. from an ... Experience with ",
+          "url": "https://www.ziprecruiter.com/Jobs/Counsel-Lawyer/-in-Murrieta,CA"
+        },
+        {
+          "title": "Law Firm Jobs in Murrieta, CA (NOW HIRING) - ZipRecruiter",
+          "snippet": "Browse 371 MURRIETA, CA LAW FIRM jobs ($40k-$81k) from companies hiring now. New openings posted daily. Apply early, get",
+          "url": "https://www.ziprecruiter.com/Jobs/Law-Firm/-in-Murrieta,CA?lk=DA1uLZvS-ntQbIuF6UZFPA"
+        },
+        {
+          "title": "Attorney Jobs in Murrieta, CA (NOW HIRING) - ZipRecruiter",
+          "snippet": "Browse 574 MURRIETA, CA ATTORNEY jobs ($67k-$275k) from companies hiring now. New openings posted daily. Apply early, ge",
+          "url": "https://www.ziprecruiter.com/Jobs/Attorney/-in-Murrieta,CA?lk=bUHxRa--3BN2gl_pBZE_Ig"
+        },
+        {
+          "title": "$40k-$125k Legal Jobs in Murrieta, CA (NOW HIRING) Jun 2025",
+          "snippet": "Robert Half Legal has partnered with a growing defense firm in Murrieta in search for a Litigation Attorney.",
+          "url": "https://www.ziprecruiter.com/Jobs/Legal/-in-Murrieta,CA"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Best Lawyers in Murrieta, CA | Justia Lawyer Directory",
+          "snippet": "Sharon L. Tate Top Rated Lawyer 10/10(1 Peer Review) ... Free Consultation Murrieta, CA Attorney with 29 years of experi",
+          "url": "https://www.justia.com/lawyers/california/murrieta",
+          "complaints": []
+        },
+        {
+          "title": "The Best Law Firms in Murrieta (California) | Comparison & Reviews",
+          "snippet": "For Lawyers Login \u00b7 Verified Directory \u00b7 Find the best law firms in Murrieta. Compare profiles, client reviews, and pric",
+          "url": "https://legalrank.co/l/law-firm/california/murrieta/",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Lawyers in Murrieta, CA - Updated 2026 - Quality ... - Yel",
+          "snippet": "Top 10 Best lawyers with Reviews and Photos Near Murrieta, California - Near You",
+          "url": "https://www.yelp.com/search?find_desc=lawyers&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Murrieta, CA Lawyers & Law Firms - Find the Best Near You",
+          "snippet": "Find a local Murrieta lawyer near you. Make the right choice when contacting a California law firm by using our detailed",
+          "url": "https://www.lawyers.com/all-legal-issues/murrieta/california/law-firms/",
+          "complaints": []
+        },
+        {
+          "title": "Best 30 Attorneys in Murrieta, CA with Reviews | The Real Yellow Pages",
+          "snippet": "Compare Attorneys in Murrieta, CA. Access business information, offers, and more - THE REAL YELLOW PAGES\u00ae",
+          "url": "https://www.yellowpages.com/murrieta-ca/attorneys",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no booking system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 1818,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://twitter.com/Lawyer_Land",
+          "https://www.facebook.com/LawyerLandInc"
+        ]
+      },
+      "archetype": "contact_worthy"
+    },
+    "murrietapropertymana": {
+      "id": "murrietapropertymana",
+      "name": "Murrieta Property Management, Murrieta Property Managers Property Management Companies.",
+      "trade": "Property Management",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "homeriver.com/california/murrieta-property-management",
+      "first_seen": "2026-07-06T13:00:00.566433+00:00",
+      "last_seen": "2026-08-03T21:00:55.375046+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example",
+        "contact1@anonymized.example",
+        "contact2@anonymized.example",
+        "contact3@anonymized.example",
+        "contact4@anonymized.example"
+      ],
+      "own_domains": [
+        "homeriver.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$18-$31/hr Property Management Companies Jobs Murrieta, CA",
+          "snippet": "Browse 276 MURRIETA, CA PROPERTY MANAGEMENT COMPANIES jobs ($18-$31/hr) from employers hiring now. Find openings near yo",
+          "url": "https://www.ziprecruiter.com/Jobs/Property-Management-Companies/-in-Murrieta,CA?lk=yvAhU_ayVNlgZ6uZykQpFw"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "THE BEST 10 PROPERTY MANAGEMENT IN MURRIETA, CA - Yelp",
+          "snippet": "What are people saying about property management services in Murrieta, CA? This is a review for a property management bu",
+          "url": "https://www.yelp.com/search?cflt=propertymgmt&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Property Management Companies in Murrieta, CA",
+          "snippet": "Compare 57+ property management companies in Murrieta, CA. Read reviews, compare services & fees, and connect with top-r",
+          "url": "https://propertymanagementlist.com/cities/murrieta/",
+          "complaints": []
+        },
+        {
+          "title": "Property Management Murrieta, CA - Last Updated July 2026 - Yelp",
+          "snippet": "What are the best property management that offers property leasing services? These are the best property management that",
+          "url": "https://www.yelp.com/search?find_desc=property+management&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Best 30 Real Estate Management in Murrieta, CA with Reviews | The Real",
+          "snippet": "Real Estate Management in Murrieta on YP.com. See reviews, photos, directions, phone numbers and more for the best Real ",
+          "url": "https://www.yellowpages.com/murrieta-ca/real-estate-management",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 941,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.crunchbase.com/organization/homeriver-group",
+          "https://google.com/search?kgmid=/g/11f010g2sf"
+        ]
+      },
+      "archetype": "contact_worthy"
+    },
+    "murrietarecruitershe": {
+      "id": "murrietarecruitershe",
+      "name": "Murrieta Recruiters & Headhunters",
+      "trade": "Recruiting",
+      "tier": "Warm",
+      "score": 41,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "headhuntersdirectory.com/usa/california/murrieta-recruiters-headhunters",
+      "first_seen": "2026-07-30T21:00:53.124171+00:00",
+      "last_seen": "2026-07-30T21:00:53.124171+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "headhuntersdirectory.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Recruitment Agencies Jobs in Murrieta, CA (NOW HIRING)",
+          "snippet": "Browse 1000+ MURRIETA, CA RECRUITMENT AGENCIES jobs ($52k-$101k) hiring now. New openings posted daily. Apply early, get",
+          "url": "https://www.ziprecruiter.com/Jobs/Recruitment-Agencies/-in-Murrieta,CA"
+        },
+        {
+          "title": "Hired Jobs in Murrieta, CA (NOW HIRING) Apr 26 - ZipRecruiter",
+          "snippet": "Browse 60+ MURRIETA, CA HIRED jobs from companies hiring now. New openings posted daily\u2014find postings near you & 1-click",
+          "url": "https://www.ziprecruiter.com/Jobs/Hired/-in-Murrieta,CA"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "TOP 10 BEST Headhunter in Murrieta, CA - Updated 2024 - Yelp",
+          "snippet": "Top 10 Best Headhunter in Murrieta, CA - September 2024 - Yelp - iStaff Pros, PrideStaff, AppleOne Accounting and Financ",
+          "url": "https://www.yelp.com/search?find_desc=Headhunter&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Best 30 Employment Agencies in Murrieta, CA with Reviews | The Real Ye",
+          "snippet": "From Business: Express Employment Professionals is on a mission to put a million people to work annually. Our recruiters",
+          "url": "https://www.yellowpages.com/murrieta-ca/employment-agencies",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Headhunters in Murrieta, CA - Updated 2026 - Quality ... -",
+          "snippet": "What are people saying about employment agencies services in Murrieta, CA? This is a review for a employment agencies bu",
+          "url": "https://www.yelp.com/search?find_desc=Headhunters&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Tech Recruiters in Murrieta, CA - Updated 2026 - Quality &",
+          "snippet": "\"Debra's passion as a recruiter has only rewarded me with great opportunities and prominent places to...\" more",
+          "url": "https://www.yelp.com/search?find_desc=Tech+Recruiters&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Staffing Agencies in Murrieta, CA - Updated 2026 - Quality",
+          "snippet": "Professional Services \u00b7 \u201cProfessional\u201d - according to 3 users",
+          "url": "https://www.yelp.com/search?find_desc=Staffing+Agencies&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress",
+        "words": 1849,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "neighborshvac": {
+      "id": "neighborshvac",
+      "name": "Neighbors HVAC",
+      "trade": "HVAC",
+      "tier": "Unverified",
+      "score": 3,
+      "reasons": [
+        "site appears down (+3)",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "neighborshvac.com/murrieta-ca",
+      "first_seen": "2026-07-31T05:00:06.969344+00:00",
+      "last_seen": "2026-07-31T05:00:06.969344+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "neighborshvac.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "down",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "near-empty page"
+        ],
+        "platform": "N/A",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "painterspaintingcomp": {
+      "id": "painterspaintingcomp",
+      "name": "Painters & Painting Company",
+      "trade": "Painting",
+      "tier": "Cold",
+      "score": 23,
+      "reasons": [
+        "multi-location / multi-phone (+8)",
+        "website score 0/5 \u2014 major gap (+15)"
+      ],
+      "url": "aapaintcompany.com",
+      "first_seen": "2026-07-29T21:00:10.630753+00:00",
+      "last_seen": "2026-07-29T21:00:10.630753+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "aapaintcompany.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 0,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no contact page",
+          "not mobile-responsive",
+          "no CRM",
+          "no marketing tools",
+          "no analytics",
+          "thin content (0w)"
+        ],
+        "platform": "Custom",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "payrollworkerscomphr": {
+      "id": "payrollworkerscomphr",
+      "name": "Payroll, Workers' Comp, HR, and Business Consulting",
+      "trade": "Consulting",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "bbsi.com/locations/temecula",
+      "first_seen": "2026-07-06T13:00:00.566433+00:00",
+      "last_seen": "2026-07-06T13:00:00.566433+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "bbsi.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$58k-$104k Hr Consulting Jobs (NOW HIRING) May 2026 - ZipRecruiter",
+          "snippet": "Browse 60+ HR CONSULTING jobs ($58k-$104k) from companies hiring now. New openings. Be seen first by employers and 1-cli",
+          "url": "https://www.ziprecruiter.com/n/Hr-Consulting-Jobs-Near-Me"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Best Payroll Software And Services for Small Business (2026) \u2013 Forbes ",
+          "snippet": "Most of the small business payroll services we reviewed combine payroll processing with some level of benefits administr",
+          "url": "https://www.forbes.com/advisor/business/software/best-payroll-services/",
+          "complaints": []
+        },
+        {
+          "title": "75 Best Payroll Services | Reviews & Comparison - SHRM",
+          "snippet": "CORPORATE PAYROLL SERVICES - Payroll Delivery: Managing a company's payroll with precision and efficiency is a cornersto",
+          "url": "https://vendordirectory.shrm.org/category/hr-services/payroll-services",
+          "complaints": []
+        },
+        {
+          "title": "Top Payroll Consulting Firms for US Businesses: What to Look For and H",
+          "snippet": "Integrated payroll tax advisory and workers' compensation management to shield your business from regulatory risks. A un",
+          "url": "https://www.getdianahr.com/blog/top-payroll-consulting-firms-us-businesses",
+          "complaints": []
+        },
+        {
+          "title": "Do you get workers comp through your payroll provider or through an in",
+          "snippet": "This is a friendly reminder that r/smallbusiness is a question and answer subreddit. You ask a question about starting, ",
+          "url": "https://www.reddit.com/r/smallbusiness/comments/1pijngy/do_you_get_workers_comp_through_your_payroll/",
+          "complaints": []
+        },
+        {
+          "title": "The Best HR Consulting Companies To Consider For Your Business",
+          "snippet": "As you review HR companies, we\u2019d be remiss if we didn\u2019t let you know what HR consulting offerings Complete Payroll Solut",
+          "url": "https://www.completepayrollsolutions.com/blog/best-hr-consulting-companies",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 4976,
+        "has_crm": [
+          "HubSpot"
+        ],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.linkedin.com/company/bbsi",
+          "https://x.com/BBSInews"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "plumbingservices": {
+      "id": "plumbingservices",
+      "name": "Plumbing Services",
+      "trade": "Plumbing",
+      "tier": "Cold",
+      "score": 38,
+      "reasons": [
+        "appointment trade with no booking system (+10)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "website score 2/5 (+8)"
+      ],
+      "url": "plumbermurrieta.plumbing",
+      "first_seen": "2026-07-06T21:00:16.153639+00:00",
+      "last_seen": "2026-07-31T05:00:06.969344+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example"
+      ],
+      "own_domains": [
+        "plumbermurrieta.plumbing",
+        "rotorooter.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$26-$47/hr Plumbing Jobs New York City, NY (NOW HIRING)",
+          "snippet": "The Position Our licensed plumbers ... services as needed. ... Growth opportunities: When you begin your career with 1-8",
+          "url": "https://www.ziprecruiter.com/Jobs/Plumbing/-in-New-York-City,NY"
+        },
+        {
+          "title": "$23-$43/hr Plumbing Jobs (NOW HIRING) Jun 2026",
+          "snippet": "Walker Plumbing Heating & Air is looking for an experienced and driven Service Plumber to join our team.",
+          "url": "https://www.ziprecruiter.com/Jobs/Plumbing"
+        },
+        {
+          "title": "Plumbing Jobs in Murrieta, CA (NOW HIRING) - ZipRecruiter",
+          "snippet": "Browse 836 MURRIETA, CA PLUMBING jobs ($24-$44/hr) from companies hiring now. New openings posted daily. Apply early, ge",
+          "url": "https://www.ziprecruiter.com/Jobs/Plumbing/-in-Murrieta,CA?lk=qdsFcRpUmmGeX6dgSuU8vQ"
+        },
+        {
+          "title": "Plumbing Jobs in Murrieta, CA - Now Hiring | Snagajob",
+          "snippet": "Find hourly Plumbing jobs in Murrieta, CA on Snagajob.com. Apply to 21 full-time and part-time jobs, gigs, shifts, local",
+          "url": "https://www.snagajob.com/search/w-murrieta,+ca/q-plumbing"
+        },
+        {
+          "title": "The Top Job Board for the | Plumbing Job Board - Plumber Job Openings",
+          "snippet": "Plumbers can find Plumbing Jobs here with great pay and benefits. Plumbing companies and employers can hire experienced ",
+          "url": "https://www.plumbingjobs.org/"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Hire the Best Local Plumbers Near Me with Reviews | Angi",
+          "snippet": "I will use 503 PLUMBING & MECHANICAL LLC again for my plumbing needs. They were fast and expained everything to me so I ",
+          "url": "https://www.angi.com/nearme/plumbing/",
+          "complaints": []
+        },
+        {
+          "title": "Reviews | All Plumbing Inc.",
+          "snippet": "... I highly recommend this plumbing company! From start to finish, the service was outstanding. Edgar was professional,",
+          "url": "https://allplumbing.com/allplumbing-reviews/",
+          "complaints": []
+        },
+        {
+          "title": "THE BEST 10 PLUMBING IN MURRIETA, CA - Yelp",
+          "snippet": "What are people saying about plumbing services in Murrieta, CA? This is a review for a plumbing business in Murrieta, CA",
+          "url": "https://www.yelp.com/search?cflt=Plumbing&find_loc=Murrieta%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Plumbing Murrieta, CA - Last Updated July 2026 - Yelp",
+          "snippet": "What are people saying about plumbing services in Murrieta, CA? This is a review for a plumbing business in Murrieta, CA",
+          "url": "https://www.yelp.com/search?find_desc=plumbing&find_loc=Murrieta,+CA",
+          "complaints": []
+        },
+        {
+          "title": "Top 10 Best Plumbers in Murrieta, CA | Angi",
+          "snippet": "Read real reviews and see ratings for Murrieta, CA plumbers for free! This list will help you pick the right plumbers in",
+          "url": "https://www.angi.com/companylist/us/ca/murrieta/plumbing.htm",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 2,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no contact page",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress",
+        "words": 2050,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/Murrieta-Plumbing-Company-1690720287831475/?ref=hl",
+          "https://mastodon.social/@dinotag",
+          "https://goo.gl/maps/rGhzukHwtZyC3oaB9",
+          "https://www.yelp.com/biz/murrieta-plumbing-company-murrieta"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "propertymanagement1r": {
+      "id": "propertymanagement1r",
+      "name": "Property Management#1 Rental Company",
+      "trade": "Property Management",
+      "tier": "Unverified",
+      "score": 3,
+      "reasons": [
+        "site appears down (+3)",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "wsr.net/murrieta-property-management",
+      "first_seen": "2026-07-30T21:00:53.124171+00:00",
+      "last_seen": "2026-07-30T21:00:53.124171+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "wsr.net"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "down",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "near-empty page"
+        ],
+        "platform": "N/A",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "rioslandscapeandtree": {
+      "id": "rioslandscapeandtree",
+      "name": "Rios Landscape And Tree Services",
+      "trade": "Tree Service",
+      "tier": "Unverified",
+      "score": 0,
+      "reasons": [
+        "site unverified \u2014 scored on external signals only",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "rioslandscapes.com",
+      "first_seen": "2026-07-29T21:00:10.630753+00:00",
+      "last_seen": "2026-07-29T21:00:10.630753+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "rioslandscapes.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "unknown",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "unreachable \u2014 couldn't connect"
+        ],
+        "platform": "Unknown",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "robertsinmanlandscap": {
+      "id": "robertsinmanlandscap",
+      "name": "Robert S Inman Landscaping",
+      "trade": "Landscaping",
+      "tier": "Unverified",
+      "score": 3,
+      "reasons": [
+        "site appears down (+3)",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "rsilandscaping.com",
+      "first_seen": "2026-07-29T13:00:56.235517+00:00",
+      "last_seen": "2026-07-29T13:00:56.235517+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "rsilandscaping.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "down",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "near-empty page"
+        ],
+        "platform": "N/A",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "sanchezassociates": {
+      "id": "sanchezassociates",
+      "name": "Sanchez & Associates",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 54,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "hiring for an automatable role (+25)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "egsanchez.com",
+      "first_seen": "2026-06-21T09:48:34.635786+00:00",
+      "last_seen": "2026-08-03T13:00:40.873374+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "egsanchez.com"
+      ],
+      "hiring_role_match": true,
+      "hiring_signals": [
+        {
+          "title": "Eg Sanchez Associates Senior Tax Accountant Job Murrieta",
+          "snippet": "E.G. Sanchez & Associates, CPAs is a growing multi-location CPA firm with offices in Murrieta, CA (headquarters), Escond",
+          "url": "https://www.ziprecruiter.com/c/E.G.-Sanchez-&-Associates,-CPAs,-APC/Job/Senior-Tax-Accountant/-in-Murrieta,CA?jid=480767154f72aef5"
+        },
+        {
+          "title": "Careers \u2013 Falc\u00f3n S\u00e1nchez & Associates, PSC",
+          "snippet": "Come work with us! At Falc\u00f3n-S\u00e1nchez, we will encourage and support your growth by providing excellent training and ongo",
+          "url": "https://www.falcon-sanchez.com/careers/"
+        },
+        {
+          "title": "Senior Tax Accountant job with E.G. Sanchez & Associates, CPAs, APC ..",
+          "snippet": "E.G. Sanchez & Associates, CPAs is a growing multi-location CPA firm with offices in Murrieta, CA (headquarters), Escond",
+          "url": "https://mycareer.aicpa-cima.com/job/14278625/senior-tax-accountant/"
+        },
+        {
+          "title": "Careers \u2013 Sanchez & Amador",
+          "snippet": "Careers at Sanchez & Amador. We provide flexible scheduling, work-from-home options, generous health care and retirement",
+          "url": "https://sanchez-amador.com/careers/"
+        },
+        {
+          "title": "$15-$52/hr Sanchez Jobs (NOW HIRING) Jun 2025",
+          "snippet": "E.G. Sanchez & Associates, CPAs",
+          "url": "https://www.ziprecruiter.com/Jobs/Sanchez"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Working at Sanchez and Associates in Chicago, IL: Employee Reviews | I",
+          "snippet": "Reviews from Sanchez and Associates employees about Sanchez and Associates culture, salaries, benefits, work-life balanc",
+          "url": "https://www.indeed.com/cmp/Sanchez-and-Associates/reviews?fcountry=US&floc=Chicago,+IL",
+          "complaints": []
+        },
+        {
+          "title": "EG SANCHEZ & ASSOCIATES - Updated June 2026 - Yelp",
+          "snippet": "Yelp users haven't asked any questions yet about EG Sanchez & Associates.",
+          "url": "https://www.yelp.com/biz/eg-sanchez-and-associates-murrieta",
+          "complaints": []
+        },
+        {
+          "title": "Working at Sanchez and Associates: Employee Reviews | Indeed.com",
+          "snippet": "Reviews from Sanchez and Associates employees about Sanchez and Associates culture, salaries, benefits, work-life balanc",
+          "url": "https://www.indeed.com/cmp/Sanchez-and-Associates/reviews",
+          "complaints": []
+        },
+        {
+          "title": "E.G. Sanchez & Associates - 10 Reviews - Accountants in Murrieta, CA .",
+          "snippet": "Read 10 customer reviews of E.G. Sanchez & Associates, one of the best Accountants businesses at 38975 Sky Canyon Dr Ste",
+          "url": "https://reviews.birdeye.com/eg-sanchez-associates-157285532799012",
+          "complaints": []
+        },
+        {
+          "title": "Lawyer threatened to sue me for a 1-star review. Now his 1-star review",
+          "snippet": "If you win PLEASEEEE GO BACK AND LEAVE ANOTHER REVIEW \u201c1 star couldn\u2019t even defend himself in court. Do not trust to hel",
+          "url": "https://www.reddit.com/r/pettyrevenge/comments/10qbdim/lawyer_threatened_to_sue_me_for_a_1star_review/",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 1828,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "savvyconsulting": {
+      "id": "savvyconsulting",
+      "name": "Savvy Consulting",
+      "trade": "Consulting",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "single complaint mention \u2014 needs corroboration to score",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "thesavvyconsulting.com",
+      "first_seen": "2026-06-21T09:56:17.885699+00:00",
+      "last_seen": "2026-08-03T21:00:55.375046+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "thesavvyconsulting.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Latest News - Savvy Consulting",
+          "snippet": "Any current employee on Savvy Consulting, Inc. payroll can participate with the exception of Savvy Consulting's executiv",
+          "url": "https://savvyconsulting.us/careers.html"
+        },
+        {
+          "title": "SAVVY CONSULTING Jobs (Now Hiring) Near Me Jun 2026",
+          "snippet": "Phil, your career advisor will help you find the right job opening from companies hiring in the US. Find job postings ne",
+          "url": "https://www.ziprecruiter.com/co/savvy-consulting/Jobs"
+        },
+        {
+          "title": "Sales and Customer Acquisition Agent - Savvy Consulting",
+          "snippet": "Savvy Consulting Sales And Customer Acquisition Agent jobs in Murrieta, CA. View job details, responsibilities & qualifi",
+          "url": "https://www.monster.com/job-openings/sales-and-customer-acquisition-agent-murrieta-ca--f7086e84-fc8a-413f-ac39-5e6ed9ffa722"
+        },
+        {
+          "title": "Savvy Consulting Jobs in Visalia, CA (NOW HIRING) May 26",
+          "snippet": "Browse 9 VISALIA, CA SAVVY CONSULTING jobs from companies hiring now. New openings posted daily. Apply early, be seen fi",
+          "url": "https://www.ziprecruiter.com/Jobs/Savvy-Consulting/-in-Visalia,CA"
+        },
+        {
+          "title": "Entry-Level Marketing Job in Temecula, CA | Apply Now",
+          "snippet": "Apply to Savvy Consulting Entry-Level Marketing Job in Temecula, CA Our Application Process Here's what to expect when a",
+          "url": "https://thesavvyconsulting.com/apply/"
+        }
+      ],
+      "review_negative": true,
+      "review_signals": [
+        {
+          "title": "SAVVY CONSULTING Reviews (8): Pros & Cons of Working At SAVVY CONSULTI",
+          "snippet": "8 SAVVY CONSULTING reviews. A free inside look at company reviews and salaries posted anonymously by employees.",
+          "url": "https://www.glassdoor.com/Reviews/SAVVY-CONSULTING-Reviews-E429469.htm",
+          "complaints": []
+        },
+        {
+          "title": "SAVVY Consulting & Communications, LLC Reviews | Read Customer Service",
+          "snippet": "Do you agree with SAVVY Consulting & Communications, LLC's 4-star rating? Check out what 2 people have written so far, a",
+          "url": "https://www.trustpilot.com/review/consultwithsavvy.com",
+          "complaints": []
+        },
+        {
+          "title": "Working at Savvy Consulting, Inc.: 5 Reviews - Indeed",
+          "snippet": "Reviews from Savvy Consulting, Inc. employees about Savvy Consulting, Inc. culture, salaries, benefits, work-life balanc",
+          "url": "https://www.indeed.com/cmp/Savvy-Consulting,-Inc./reviews",
+          "complaints": []
+        },
+        {
+          "title": "Working at SAVVY CONSULTING | Glassdoor",
+          "snippet": "See what employees say it's like to work at SAVVY CONSULTING. Salaries, reviews, and more - all posted by employees work",
+          "url": "https://www.glassdoor.com/Overview/Working-at-SAVVY-CONSULTING-EI_IE429469.11,27.htm",
+          "complaints": []
+        },
+        {
+          "title": "Savvy Consulting Inc | BBB Reviews | Better Business Bureau",
+          "snippet": "View BBB customer reviews of Savvy Consulting Inc. Leave a review and share your experience with the BBB and Savvy Consu",
+          "url": "https://www.bbb.org/us/ca/temecula/profile/sales/savvy-consulting-inc-1126-1000155999/customer-reviews",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 1370,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "singletonsmithlawoff": {
+      "id": "singletonsmithlawoff",
+      "name": "Singleton Smith Law Offices",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 50,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "single complaint mention \u2014 needs corroboration to score",
+        "hiring for an automatable role (+25)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "singletonsmith.com",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "singletonsmith.com"
+      ],
+      "hiring_role_match": true,
+      "hiring_signals": [
+        {
+          "title": "Singleton Smith Law Offices Attorney Jobs | LawCrossing.com",
+          "snippet": "View the latest legal job openings for Singleton Smith Law Offices and apply to these positions on LawCrossing.com.",
+          "url": "https://www.lawcrossing.com/lawfirmprofile/Krl2Y/Singleton-Smith-Law-Offices/jobs"
+        },
+        {
+          "title": "Careers at Singleton Smith Law Offices | Jennie Johnson",
+          "snippet": "The firm generates revenue by providing legal counsel, representation, and litigation services, charging clients through",
+          "url": "https://jenniejohnson.com/company/singleton%20smith%20law%20offices"
+        },
+        {
+          "title": "Exciting news\u2026we're hiring! | Singleton Smith Law Offices, Inc.",
+          "snippet": "\ud83c\udf89Exciting news\u2026we're hiring! We have promoted our receptionist and are looking to fill that position. If you're interest",
+          "url": "https://www.linkedin.com/posts/singleton-smith-law-offices-inc_exciting-newswere-hiring-we-have-promoted-activity-7299593847217561600-QD_2"
+        }
+      ],
+      "review_negative": true,
+      "review_signals": [
+        {
+          "title": "Singleton Smith Law Offices - Updated May 2026 - 22 Photos & 188 Revie",
+          "snippet": "Specialties: Singleton Smith Law Offices, Inc., located in Murrieta, California, serves clients with family law, bankrup",
+          "url": "https://www.yelp.com/biz/singleton-smith-law-offices-murrieta-5",
+          "complaints": []
+        },
+        {
+          "title": "Singleton Smith Law Offices, Inc. - Reviews, Photos & Phone Number - U",
+          "snippet": "The firm prides itself on its ability to handle complex legal matters with skill and precision, while also offering comp",
+          "url": "https://singleton-smith-law-offices-inc.wheree.com/",
+          "complaints": []
+        },
+        {
+          "title": "Singleton Smith Law Offices, Inc. - 420 Reviews - Birdeye",
+          "snippet": "Read 420 customer reviews of Singleton Smith Law Offices, Inc., one of the best Business Services businesses at 24630 Wa",
+          "url": "https://reviews.birdeye.com/singleton-smith-law-offices-inc-148863784175386",
+          "complaints": []
+        },
+        {
+          "title": "4.6 \u2b50 Singleton Smith Law\u2026 Reviews in Murrieta | TrustAnalytica",
+          "snippet": "About Singleton Smith Law Offices Singleton Smith Law Offices, Inc. is a dedicated family law firm based in Murrieta, Ca",
+          "url": "https://trustanalytica.org/us/ca/murrieta/reviews/singleton-smith-law-offices-inc",
+          "complaints": []
+        },
+        {
+          "title": "SINGLETON SMITH LAW OFFICES | 21 Photos & 155 Reviews - 24630 ... - Ye",
+          "snippet": "Singleton Smith Law Offices, Inc., located in Murrieta, California, serves clients with family law, bankruptcy, and pers",
+          "url": "https://www.yelp.com/biz/singleton-smith-law-offices-murrieta-5?start=40",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 3279,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "superlawyers": {
+      "id": "superlawyers",
+      "name": "Super Lawyers",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "attorneys.superlawyers.com/civil-litigation/california/temecula",
+      "first_seen": "2026-07-06T05:00:46.742245+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "attorneys.superlawyers.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$79k-$131k Super Lawyer Jobs (NOW HIRING) Jan 2025",
+          "snippet": "Browse 99 SUPER LAWYER jobs ($79k-$131k) from companies with openings that are hiring now. Find job postings near you an",
+          "url": "https://www.ziprecruiter.com/Jobs/Super-Lawyer"
+        },
+        {
+          "title": "$89k-$149k Super Lawyer Jobs in Seattle, WA (NOW HIRING)",
+          "snippet": "Browse 3 SEATTLE, WA SUPER LAWYER jobs from companies (hiring now) with openings. Find job opportunities near you and ap",
+          "url": "https://www.ziprecruiter.com/Jobs/Super-Lawyer/-in-Seattle,WA"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Lawyer and Attorney Ratings : Find Rated Lawyers and Attorneys at Supe",
+          "snippet": "Super Lawyers provides lawyer ratings of selected lawyers and helps you find the rated lawyer / attorneys in your locati",
+          "url": "https://www.superlawyers.com/",
+          "complaints": []
+        },
+        {
+          "title": "Super Lawyers Review for April 2026 | Best Legal Services",
+          "snippet": "Super Lawyers Review: Legal Services We've analyzed the best Legal Services to help you find the right solution for your",
+          "url": "https://www.topconsumerreviews.com/best-legal-services/reviews/super-lawyers.php",
+          "complaints": []
+        },
+        {
+          "title": "Superlawyers Reviews | Read Customer Service Reviews of superlawyers.c",
+          "snippet": "I\u2019m just going to go ahead and give this platform a 1 star review\u2026 I\u2019ve called multiple lawyers regarding a contract law",
+          "url": "https://www.trustpilot.com/review/superlawyers.com",
+          "complaints": []
+        },
+        {
+          "title": "Find a Top Rated Attorney Near You | Super Lawyers",
+          "snippet": "Our Super Lawyers directory gives you multiple options to search for a top attorney in your area. Start with the search ",
+          "url": "https://attorneys.superlawyers.com/",
+          "complaints": []
+        },
+        {
+          "title": "Super Lawyers Reviews: Pros And Cons of Working At Super Lawyers<!-- -",
+          "snippet": "Research process has several flaws. This makes it hard for credibility for lawyers to want to buy advertising.",
+          "url": "https://www.glassdoor.com/Reviews/Super-Lawyers-Reviews-E1023494.htm",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 2085,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    },
+    "taxcityllc": {
+      "id": "taxcityllc",
+      "name": "Tax City, LLC",
+      "trade": "Accounting",
+      "tier": "Warm",
+      "score": 48,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "fax number \u2014 paper-based (+3)"
+      ],
+      "url": "taxcityllc.com",
+      "first_seen": "2026-08-03T13:00:40.873374+00:00",
+      "last_seen": "2026-08-03T13:00:40.873374+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example",
+        "contact1@anonymized.example"
+      ],
+      "own_domains": [
+        "taxcityllc.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "$95k-$139k Tax Office Jobs Texas City, TX (NOW HIRING)",
+          "snippet": "Browse 76,914 TAX OFFICE jobs ($111k-$150k) from companies with openings that are hiring now. Find job postings near you",
+          "url": "https://www.ziprecruiter.com/Jobs/Tax-Office/-in-Texas-City,TX"
+        },
+        {
+          "title": "$103k-$151k Tax Jobs in Oklahoma City, OK (NOW HIRING)",
+          "snippet": "Browse 1000+ OKLAHOMA CITY, OK TAX jobs ($103k-$151k) hiring now. New openings posted daily. Apply early, get seen first",
+          "url": "https://www.ziprecruiter.com/Jobs/Tax/-in-Oklahoma-City,OK"
+        },
+        {
+          "title": "$80k-$145k Tax Accounting Jobs in Kansas City, MO",
+          "snippet": "Browse 841 KANSAS CITY, MO TAX ACCOUNTING jobs ($80k-$145k) hiring now. New openings posted daily. Apply early, get seen",
+          "url": "https://www.ziprecruiter.com/Jobs/Tax-Accounting/-in-Kansas-City,MO"
+        },
+        {
+          "title": "$110k-$195k Tax Jobs in Kansas City, MO (NOW HIRING) Feb 2026",
+          "snippet": "Corporate Tax Senior Associate Location: Kansas City, MO (Hybrid - must be in-office minimum 3 days/week; must be in NYC",
+          "url": "https://www.ziprecruiter.com/Jobs/Tax/-in-Kansas-City,MO"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "TAX CITY, LLC - Updated June 2026 - 34 Reviews - 31285 Temecula Pkwy, ",
+          "snippet": "Specialties: Tax City Inc. is a full service CPA firm. Specialties include but are not limited to: Tax return preparatio",
+          "url": "https://www.yelp.com/biz/tax-city-llc-temecula-2",
+          "complaints": []
+        },
+        {
+          "title": "Tax City LLC - 8 Reviews - Tax Services in Temecula, CA - Birdeye",
+          "snippet": "Read 8 customer reviews of Tax City LLC, one of the best Tax Services businesses at 31285 Temecula Parkway, Ste 160, Tem",
+          "url": "https://reviews.birdeye.com/tax-city-llc-155662113315651",
+          "complaints": []
+        },
+        {
+          "title": "Tax City, LLC in Temecula, CA - Reviews, Hours, and Contact Details",
+          "snippet": "No contact what so ever and I was ready to hire them based on their reviews.More ... Jason is very good, and has reasona",
+          "url": "https://local.yahoo.com/info-132134662-tax-city-llc-temecula/",
+          "complaints": []
+        },
+        {
+          "title": "Temecula, CA Tax & Accounting Firm | Audits - Reviews - Compilations P",
+          "snippet": "An audit is a methodical review and objective examination of the financial statements, including the verification of spe",
+          "url": "https://www.taxcityllc.com/auditing.php",
+          "complaints": []
+        },
+        {
+          "title": "TAX CITY, LLC - Updated November 2024 - 33 Reviews - Yelp",
+          "snippet": "Specialties: Tax City Inc. is a full service CPA firm. Specialties include but are not limited to: Tax return preparatio",
+          "url": "https://www.yelp.com/biz/tax-city-llc-temecula-2?start=10",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 4,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Custom",
+        "words": 738,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Analytics"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": true,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "temeculalawyers": {
+      "id": "temeculalawyers",
+      "name": "Temecula Lawyers",
+      "trade": "Law Office",
+      "tier": "Warm",
+      "score": 49,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "admin/ops trade \u2014 budget proxy (+8)",
+        "multi-location / multi-phone (+8)",
+        "website score 2/5 (+8)"
+      ],
+      "url": "inlandempirelawyers.com/temecula.html",
+      "first_seen": "2026-07-22T13:00:56.705360+00:00",
+      "last_seen": "2026-07-22T13:00:56.705360+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "inlandempirelawyers.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "THE BEST 10 LAWYERS IN TEMECULA, CA - Yelp",
+          "snippet": "What are people saying about lawyers services in Temecula, CA? This is a review for a lawyers business in Temecula, CA: ",
+          "url": "https://www.yelp.com/search?cflt=lawyers&find_loc=Temecula%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Best Lawyers in Temecula, CA | Justia Lawyer Directory",
+          "snippet": "Compare top rated attorneys in Temecula on the Justia Lawyer Directory. View lawyer ratings, client reviews, awards, and",
+          "url": "https://www.justia.com/lawyers/california/temecula",
+          "complaints": []
+        },
+        {
+          "title": "TOP 10 BEST Lawyers in Temecula, CA - Updated 2026 - Quality ... - Yel",
+          "snippet": "Top 10 Best lawyers Near Temecula, California with Reviews and Photos",
+          "url": "https://www.yelp.com/search?find_desc=lawyers&find_loc=Temecula%2C+CA",
+          "complaints": []
+        },
+        {
+          "title": "Top Rated Temecula, CA Lawyers - Avvo.com",
+          "snippet": "FREE detailed reports on 567 Attorneys in Temecula, California. Find 2656 reviews, disciplinary sanctions, and peer endo",
+          "url": "https://www.avvo.com/all-lawyers/ca/temecula.html",
+          "complaints": []
+        },
+        {
+          "title": "Temecula, CA Lawyers & Law Firms - Find the Best Near You",
+          "snippet": "Find a local Temecula lawyer near you. Make the right choice when contacting a California law firm by using our detailed",
+          "url": "https://www.lawyers.com/all-legal-issues/temecula/california/law-firms/",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 2,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no contact page",
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Weebly",
+        "words": 1447,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Analytics",
+          "Facebook Pixel"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "contact_worthy"
+    },
+    "theraygroup": {
+      "id": "theraygroup",
+      "name": "The Ray Group",
+      "trade": "Consulting",
+      "tier": "Warm",
+      "score": 45,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)"
+      ],
+      "url": "theraygroup.us",
+      "first_seen": "2026-07-22T21:00:11.154047+00:00",
+      "last_seen": "2026-07-22T21:00:11.154047+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [
+        "contact0@anonymized.example",
+        "contact1@anonymized.example"
+      ],
+      "own_domains": [
+        "theraygroup.us"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "The Ray Tax Group Jobs & Careers - 1 Open Position | Glassdoor",
+          "snippet": "Search job openings at The Ray Tax Group. 1 The Ray Tax Group jobs including salaries, ratings, and reviews, posted by T",
+          "url": "https://www.glassdoor.com/Jobs/The-Ray-Tax-Group-Jobs-E952240.htm"
+        },
+        {
+          "title": "JOIN OUR TEAM | ray-insurance-group",
+          "snippet": "Job Type \u00b7 Select Job Type \u00b7 Workspace \u00b7 Select Workspace \u00b7 Search Jobs \u00b7 Number of jobs found: 1 \u00b7 Fishers, IN, USA \u00b7",
+          "url": "https://www.rayinsurancegroup.com/jobs"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "The Ray Tax Group | BBB Business Profile | Better Business Bureau",
+          "snippet": "Beware stay away.\"View all Reviews \u00b7 BBB Business Profiles are provided solely to assist you in exercising your own best",
+          "url": "https://www.bbb.org/us/tx/fort-worth/profile/tax-consultant/the-ray-tax-group-0825-235974446",
+          "complaints": []
+        },
+        {
+          "title": "Reviews | The Ray Tax Group",
+          "snippet": "Check out our reviews page to see what our customers are saying about us. See testimonials from real people by clicking ",
+          "url": "https://www.ray-tax.com/reviews.html",
+          "complaints": []
+        },
+        {
+          "title": "Online financial consultants and opinions on Raymond James?",
+          "snippet": "The unfortunate reality is that big box firms like RJ are juggling hundreds of clients per advisor and they simply don't",
+          "url": "https://www.reddit.com/r/investing/comments/1lye4wh/online_financial_consultants_and_opinions_on/",
+          "complaints": []
+        },
+        {
+          "title": "The Ray Tax Group Reviews (2): Pros & Cons of Working At The Ray Tax G",
+          "snippet": "Glassdoor has 2 The Ray Tax Group reviews submitted anonymously by The Ray Tax Group employees.",
+          "url": "https://www.glassdoor.com/Reviews/The-Ray-Tax-Group-Reviews-E952240.htm",
+          "complaints": []
+        },
+        {
+          "title": "The Ray Group - Zillow",
+          "snippet": "Visit The Ray Group's profile on Zillow to find ratings and reviews. Find great real estate professionals on Zillow like",
+          "url": "https://www.zillow.com/profile/theraygroupoffice",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 5,
+        "automation_gaps": [
+          "no CRM",
+          "no marketing tools"
+        ],
+        "platform": "Wix",
+        "words": 1127,
+        "has_crm": [],
+        "has_analytics": [
+          "Google Tag",
+          "Google Tag Manager",
+          "Facebook Pixel"
+        ],
+        "has_marketing_tools": [],
+        "has_booking_system": [
+          "Mindbody"
+        ],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": [
+          "https://www.facebook.com/theraygroup.us",
+          "https://x.com/TheRayGroup_us",
+          "https://www.pinterest.com/TheRayGroup_us",
+          "https://www.instagram.com/theraygroup_us"
+        ]
+      },
+      "archetype": "cross_section"
+    },
+    "truelinetalent": {
+      "id": "truelinetalent",
+      "name": "Trueline Talent",
+      "trade": "Recruiting",
+      "tier": "Unverified",
+      "score": 3,
+      "reasons": [
+        "site appears down (+3)",
+        "no contact info \u2014 can't reach"
+      ],
+      "url": "wearetrueline.com/recruiting/construction-engineering/california/murrieta",
+      "first_seen": "2026-07-30T21:00:53.124171+00:00",
+      "last_seen": "2026-07-30T21:00:53.124171+00:00",
+      "phones_anonymized": [],
+      "emails_anonymized": [],
+      "own_domains": [
+        "wearetrueline.com"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [],
+      "review_negative": false,
+      "review_signals": [],
+      "site_quality": {
+        "status": "down",
+        "confidence": "low",
+        "website_score": -1,
+        "automation_gaps": [
+          "near-empty page"
+        ],
+        "platform": "N/A",
+        "words": 0,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "cross_section"
+    },
+    "ubiquitousnetworksit": {
+      "id": "ubiquitousnetworksit",
+      "name": "Ubiquitous Networks IT Business Consulting.",
+      "trade": "Consulting",
+      "tier": "Warm",
+      "score": 49,
+      "reasons": [
+        "admin/ops business \u2014 high intake/scheduling load (+25)",
+        "generic hiring signal (+12)",
+        "multi-location / multi-phone (+8)",
+        "website score 3/5 (+4)"
+      ],
+      "url": "ubiquitousnetworks.net/it-business-consulting-temecula-ca",
+      "first_seen": "2026-07-06T13:00:00.566433+00:00",
+      "last_seen": "2026-07-06T13:00:00.566433+00:00",
+      "phones_anonymized": [
+        "(951) 555-01101",
+        "(951) 555-01101",
+        "(951) 555-01101"
+      ],
+      "emails_anonymized": [],
+      "own_domains": [
+        "ubiquitousnetworks.net"
+      ],
+      "hiring_role_match": false,
+      "hiring_signals": [
+        {
+          "title": "Careers - Ubiquitous Networks",
+          "snippet": "Join Our Team Home > Blog Job Circular Ready to Join Our Team 01 Financial Analyst August 2, 2025 | Vacaville, CA, US Th",
+          "url": "https://wordpress.ubiquitousnetworks.net/careers/"
+        },
+        {
+          "title": "$62k-$97k Ubiquitous Jobs (NOW HIRING) Jun 2026",
+          "snippet": "Browse 1000+ UBIQUITOUS jobs ($62k-$97k) from companies hiring now. New openings posted daily. Apply early, be seen firs",
+          "url": "https://www.ziprecruiter.com/Jobs/Ubiquitous"
+        },
+        {
+          "title": "$62k-$253k Ubiquitous Jobs (NOW HIRING) Apr 2026 - ZipRecruiter",
+          "snippet": "Browse 60 UBIQUITOUS jobs ($62k-$253k) from companies with openings that are hiring now. Find job postings near you and ",
+          "url": "https://www.ziprecruiter.com/Jobs/Ubiquitous?lk=y2D3EGTlSimezd9jBmHvpg"
+        },
+        {
+          "title": "$61k-$250k Ubiquitous Jobs in California (NOW HIRING) Apr 25",
+          "snippet": "... SOFTWARE ENGINEER (DIRECT TO CELL) The Direct to Cell network will expand Starlink's vision by providing ubiquitous ",
+          "url": "https://www.ziprecruiter.com/Jobs/Ubiquitous/--in-California"
+        },
+        {
+          "title": "$47-$144/hr Ubiquitous Computing Jobs (NOW HIRING) Apr 2025",
+          "snippet": "Deep understanding of networking, Cloud-based network environments, Cloud computing and Virtual ... ubiquitous OS tools.",
+          "url": "https://www.ziprecruiter.com/Jobs/Ubiquitous-Computing"
+        }
+      ],
+      "review_negative": false,
+      "review_signals": [
+        {
+          "title": "Ubiquitous Networks IT Business Consulting Temecula Ca.",
+          "snippet": "Ubiquitous Networks offers specialized IT Business Consulting Temecula the will design, review costs to ensure cost savi",
+          "url": "https://ubiquitousnetworks.net/it-business-consulting-temecula-ca/",
+          "complaints": []
+        },
+        {
+          "title": "Ubiquitous Reviews: Pros And Cons of Working At Ubiquitous<!-- --> | G",
+          "snippet": "I am relieved that this company is finally being scrutinized and discussed publicly. Sharing my experience at Ubiquitous",
+          "url": "https://www.glassdoor.com/Reviews/Ubiquitous-Reviews-E6907351.htm",
+          "complaints": []
+        },
+        {
+          "title": "UBIQUITOUS NETWORKS - Updated May 2026 - Request a Quote - Yelp",
+          "snippet": "Specialties: Ubiquitous Networks - Temecula IT Consulting & Managed Services Expert IT Business Consulting, Cybersecurit",
+          "url": "https://www.yelp.com/biz/ubiquitous-networks-san-diego-4",
+          "complaints": []
+        },
+        {
+          "title": "Ubiquitous \"ceo\" Reviews | Glassdoor",
+          "snippet": "I was consistently disheartened ... its performance and reputation. Overall, Ubiquitous is a cautionary tale of how poor",
+          "url": "https://www.glassdoor.com/Reviews/Ubiquitous-ceo-Reviews-EI_IE6907351.0,10_KH11,14.htm",
+          "complaints": []
+        },
+        {
+          "title": "Ubiquitous Networks in Temecula, CA - Reviews, Hours, and ... - Yahoo",
+          "snippet": "Read customer reviews and get hours of operation and contact information for Ubiquitous Networks, a(n) Computer Repair b",
+          "url": "https://local.yahoo.com/info-215362180-ubiquitous-networks-temecula/",
+          "complaints": []
+        }
+      ],
+      "site_quality": {
+        "status": "up",
+        "confidence": "high",
+        "website_score": 3,
+        "automation_gaps": [
+          "no booking/chat system",
+          "no click-to-call",
+          "no CRM",
+          "no marketing tools",
+          "no analytics"
+        ],
+        "platform": "WordPress/Elementor",
+        "words": 5114,
+        "has_crm": [],
+        "has_analytics": [],
+        "has_marketing_tools": [],
+        "has_booking_system": [],
+        "has_outdated_email": false,
+        "has_fax": false,
+        "socials": []
+      },
+      "archetype": "false_positive"
+    }
+  },
+  "labels": {}
+}

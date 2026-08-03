@@ -1,0 +1,228 @@
+{
+  "_meta": {
+    "task": "SGW-861",
+    "description": "Human/agent-assigned labels for the NWP lead benchmark fixture. Label = would Steven actually contact this business for a digital-worker retainer?",
+    "label_meanings": {
+      "good_fit": "Real, contactable, in-geography business in an admin/ops-heavy lane — Steven would contact. Strong evidence.",
+      "possible_fit": "Real business but weak capacity/signals/geography — worth a look, not a priority contact.",
+      "bad_fit": "Crawler artifact: directory listing, SEO keyword page, aggregator, out-of-geography, or identity-confused record. Would NOT contact.",
+      "unknown": "Could not verify: site down/blocked, no contact info captured. Not actionable."
+    },
+    "labeled_at": "2026-08-03",
+    "labeler": "Sierra (agent) — evidence reviewed from cache: URL, domain ownership, hiring/review signal provenance"
+  },
+  "labels": {
+    "1personalinjuryattor": {
+      "label": "good_fit",
+      "reason": "Khashan Law — real Murrieta PI firm, verified site (up/high), contactable. PI firms live on intake/phone volume; prime retainer prospect."
+    },
+    "aboutapexplumbingser": {
+      "label": "possible_fit",
+      "reason": "Apex Plumbing (callapexnow.com) — real local plumber, appointment trade, but Cold score 34 with no corroborated pain/hiring. Worth a look only."
+    },
+    "accounting": {
+      "label": "possible_fit",
+      "reason": "Bookkeeping Services Plus — real bookkeeping business, good lane, but hiring/review evidence is generic ZipRecruiter/CalCPA noise, not business-specific. Contactable."
+    },
+    "accurateaccounting": {
+      "label": "good_fit",
+      "reason": "Accurate Accounting (accuacct.com) — real CPA firm, verified site, contactable, admin/ops lane. Strong retainer archetype."
+    },
+    "acrepair": {
+      "label": "possible_fit",
+      "reason": "SoCal AC Guy — real HVAC business with Murrieta landing page, but captured hiring/review evidence is out-of-geography noise (San Antonio jobs, NYC Aircon reviews). Contactable but unproven."
+    },
+    "allstatecarinsurance": {
+      "label": "possible_fit",
+      "reason": "Allstate agent (Nathan Giddings, Murrieta) — real local agency, insurance = admin/ops, but 'hiring' evidence is Allstate corporate careers page, not the local office. Contactable."
+    },
+    "bankruptcyattorney": {
+      "label": "good_fit",
+      "reason": "Pickford Law — real bankruptcy firm, verified site, contactable. Intake-heavy law practice; exact automation pitch."
+    },
+    "bookkeepingcampbellb": {
+      "label": "possible_fit",
+      "reason": "Campbell Bookkeeping — real bookkeeping firm but geography suspect (Campbell CA ≠ 92562) and hiring evidence is generic ZipRecruiter. Verify location before contact."
+    },
+    "carpetcleaninginranc": {
+      "label": "possible_fit",
+      "reason": "Spiker Carpet & Tile Care — real business, service-area page for Rancho Murieta. Cold 23, weak signals, but real and contactable."
+    },
+    "consultatechautomoti": {
+      "label": "possible_fit",
+      "reason": "Consult-A-Tech Automotive — real specialist shop, verified site, Cold 13. Real business, weak retainer signals."
+    },
+    "davekirbyinsuranceag": {
+      "label": "good_fit",
+      "reason": "Dave Kirby Insurance Agency — real local agency, verified site, contactable. Insurance agencies = scheduling/service-call drag."
+    },
+    "employmentcreditmili": {
+      "label": "good_fit",
+      "reason": "Temecula Consumer Attorneys (temeculaconsumerattorneys.com) — real law firm, verified, contactable. Intake-heavy practice."
+    },
+    "fixrightroofinginc": {
+      "label": "possible_fit",
+      "reason": "FixRight Roofing — real local roofer, verified site, Cold 16. Real but weak evidence of capacity/pain."
+    },
+    "fullserviceaccountin": {
+      "label": "good_fit",
+      "reason": "Swenson Advisors — real accounting firm, verified site, contactable. Admin/ops lane, intake-heavy."
+    },
+    "guardianplumbersisyo": {
+      "label": "possible_fit",
+      "reason": "Guardian Plumbers — real plumbing company (SEO-titled page), Cold 23. Appointment trade but weak corroborated signals."
+    },
+    "handyman": {
+      "label": "bad_fit",
+      "reason": "thetoolboxpro.com/handyman-in-temecula-ca — lead-gen/SEO landing page, not a business. Crawler artifact."
+    },
+    "handymanservice": {
+      "label": "bad_fit",
+      "reason": "zomgthehandyman.com/handyman/temecula — SEO service page, not a standalone business record."
+    },
+    "handymanservicesteme": {
+      "label": "possible_fit",
+      "reason": "JC App Services — real handyman business (jcappservices.com) behind an SEO title. Real but tiny; weak capacity."
+    },
+    "homeautobusinessandr": {
+      "label": "possible_fit",
+      "reason": "Travelers agent (Murrieta) — real local agency, insurance lane, but hiring evidence is USAA/ziprecruiter noise. Contactable."
+    },
+    "homerepairsnear": {
+      "label": "unknown",
+      "reason": "JCS Handyman — real-looking domain but site blocked, no contact info captured. Not actionable until verified."
+    },
+    "homeyou": {
+      "label": "bad_fit",
+      "reason": "homeyou.com — cost-estimator/lead-gen platform page, not a business. Crawler artifact."
+    },
+    "hrsscorp": {
+      "label": "possible_fit",
+      "reason": "HRSS Corp — real HR/staffing company, verified site. Staffing firms are automation-adjacent but may sell competing services. Worth a look."
+    },
+    "jameshhoulecpa": {
+      "label": "possible_fit",
+      "reason": "James H. Houle CPA — real firm but captured phones are invalid area codes (anonymized source had garbage); weak verified evidence beyond the site."
+    },
+    "jobstemecula": {
+      "label": "good_fit",
+      "reason": "Jobs Temecula — real recruiting firm, verified site, contactable. Recruiting = scheduling/follow-up heavy; prime retainer prospect."
+    },
+    "kdainclicensedcpasen": {
+      "label": "good_fit",
+      "reason": "KDA Inc. CPAs — real firm with Murrieta service-area page, verified site. Admin/ops lane, intake-heavy."
+    },
+    "lawlink": {
+      "label": "bad_fit",
+      "reason": "lawlink.com — attorney directory listing, not a business. Review evidence is Glassdoor/F6S noise."
+    },
+    "manageditservicestem": {
+      "label": "unknown",
+      "reason": "Managed IT Services Temecula — real IT firm but site down and no contact captured. Tech-adjacent (possible partner OR buyer), but unverifiable now."
+    },
+    "maximizeyourrentalre": {
+      "label": "possible_fit",
+      "reason": "Robert Cole Properties — real PM company, good lane, but captured review evidence is generic articles about rental ROI, not business reviews. Contactable."
+    },
+    "mbcconsultinginc": {
+      "label": "bad_fit",
+      "reason": "Identity-confused record: URL is allbiz.com directory listing; 'hiring' evidence points to Morgan Business Consulting (different firm). Cannot trust what this record is."
+    },
+    "muriettacriminaldefe": {
+      "label": "good_fit",
+      "reason": "Murrieta criminal defense attorney — real law practice, verified site, contactable. Intake-heavy."
+    },
+    "murrietacaattorneydi": {
+      "label": "bad_fit",
+      "reason": "attorneyhelp.org — directory listing, not a business. Review evidence is Justia/Yelp search pages."
+    },
+    "murrietacalandscapin": {
+      "label": "unknown",
+      "reason": "Monarch MLD (monarchmld.com) — real landscaping business behind service page, but site down and no contact captured."
+    },
+    "murrietacarpetcleani": {
+      "label": "possible_fit",
+      "reason": "MacDonald Carpet Cleaning — real business, service-area page. Cold 23, weak signals but real and contactable."
+    },
+    "murrietacommercialpa": {
+      "label": "possible_fit",
+      "reason": "SD Paint Pros (sandiegopaintpros.com) — real painting company with Murrieta page. Cold 8, weak retainer signals."
+    },
+    "murrietalawyers": {
+      "label": "bad_fit",
+      "reason": "lawyerland.com — directory listing. Hiring evidence is generic ZipRecruiter employment-lawyer ads, reviews are Justia/Yelp search pages."
+    },
+    "murrietapropertymana": {
+      "label": "good_fit",
+      "reason": "HomeRiver Group (homeriver.com) — real national PM group with Murrieta office. Property management = top retainer lane. Hiring evidence generic but lane fit is strong."
+    },
+    "murrietarecruitershe": {
+      "label": "bad_fit",
+      "reason": "headhuntersdirectory.com — directory listing, not a business. Hiring evidence is generic recruitment-agency job ads."
+    },
+    "neighborshvac": {
+      "label": "unknown",
+      "reason": "Neighbors HVAC — real HVAC company, but site down and no contact captured. Appointment trade, promising if verified."
+    },
+    "painterspaintingcomp": {
+      "label": "possible_fit",
+      "reason": "AA Paint Company (aapaintcompany.com) — real business, Cold 23. Real but weak signals."
+    },
+    "payrollworkerscomphr": {
+      "label": "bad_fit",
+      "reason": "BBSI (bbsi.com) — large national HR/payroll company with a Temecula location. Sells HR services itself; not a retainer buyer."
+    },
+    "plumbingservices": {
+      "label": "possible_fit",
+      "reason": "plumbermurrieta.plumbing — likely real local plumber marketing page (owns rotorooter.com second domain). Hiring/review evidence is out-of-geography noise."
+    },
+    "propertymanagement1r": {
+      "label": "unknown",
+      "reason": "WSR (wsr.net) — real PM firm but site down and no contact captured. Strong archetype, unverifiable now."
+    },
+    "rioslandscapeandtree": {
+      "label": "unknown",
+      "reason": "Rios Landscape And Tree Services — no site status, no contact info captured. Not actionable."
+    },
+    "robertsinmanlandscap": {
+      "label": "unknown",
+      "reason": "Robert S Inman Landscaping — site down, no contact captured. Not actionable."
+    },
+    "sanchezassociates": {
+      "label": "good_fit",
+      "reason": "E.G. Sanchez & Associates CPAs — real multi-location Murrieta CPA firm, verified site, real hiring signal (Senior Tax Accountant in Murrieta), contactable. Review evidence has one Chicago-firm confusion but the core record is strong."
+    },
+    "savvyconsulting": {
+      "label": "possible_fit",
+      "reason": "thesavvyconsulting.com — real business but identity-confused evidence (hiring points to savvyconsulting.us, a different Savvy Consulting). Reviews have no corroborated complaints. Verify before contact."
+    },
+    "singletonsmithlawoff": {
+      "label": "good_fit",
+      "reason": "Singleton Smith Law Offices — real, established Murrieta law firm (188 Yelp reviews), verified site, contactable. Law = intake-heavy. Review evidence shows no captured complaint text despite negative flag."
+    },
+    "superlawyers": {
+      "label": "bad_fit",
+      "reason": "attorneys.superlawyers.com — directory listing. Hiring evidence is 'Super Lawyer jobs' on ZipRecruiter (nonsense), reviews are aggregator pages."
+    },
+    "taxcityllc": {
+      "label": "good_fit",
+      "reason": "Tax City LLC — real tax firm, verified site, contactable. Tax/accounting = intake-heavy admin/ops lane."
+    },
+    "temeculalawyers": {
+      "label": "bad_fit",
+      "reason": "inlandempirelawyers.com — directory listing, not a business. Reviews are Yelp/Justia search pages."
+    },
+    "theraygroup": {
+      "label": "possible_fit",
+      "reason": "The Ray Group (theraygroup.us) — real consulting company, verified site, contactable. Lane fit weaker than admin/ops trades."
+    },
+    "truelinetalent": {
+      "label": "unknown",
+      "reason": "Trueline Talent (wearetrueline.com) — real recruiting firm, strong archetype, but site down and no contact captured."
+    },
+    "ubiquitousnetworksit": {
+      "label": "possible_fit",
+      "reason": "Ubiquitous Networks IT — real IT consulting firm, verified site, but captured phones had invalid area codes. Tech-adjacent; verify contact before outreach."
+    }
+  }
+}
