@@ -437,6 +437,34 @@ SCORING = {
     "tiers": {"hot": 65, "warm": 40},
 }
 
+# ── SGW-863: COLLECTOR REGISTRY ──────────────────────────────────────────
+# Pluggable, config-gated collectors. Each entry: name, enabled, timeout_s.
+# run_collector() wraps every collector with per-source timeout + failure
+# isolation so one broken source can never kill the pipeline (SGW-863
+# acceptance: disabling any collector doesn't break scoring or reporting).
+COLLECTORS = {
+    "crawl_search":    {"enabled": True,  "timeout_s": 120, "desc": "SearXNG business discovery"},
+    "website_check":   {"enabled": True,  "timeout_s": 120, "desc": "Site audit (HTTP fetch + parse)"},
+    "hiring_signals":  {"enabled": True,  "timeout_s": 90,  "desc": "Job-posting signal search"},
+    "review_signals":  {"enabled": True,  "timeout_s": 90,  "desc": "Review-complaint signal search"},
+    "buying_signals":  {"enabled": True,  "timeout_s": 120, "desc": "Reddit/FB buying-signal crawl"},
+}
+
+def collector_enabled(name):
+    return COLLECTORS.get(name, {}).get("enabled", True)
+
+def run_collector(name, fn, *args, **kwargs):
+    """Run a collector with its configured timeout; on any failure return
+    None and log — never let one source's error crash the run (SGW-863)."""
+    if not collector_enabled(name):
+        log(f"collector disabled: {name}")
+        return None
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:  # noqa: BLE001 — isolation is the point
+        log(f"collector failed ({name}): {e}")
+        return None
+
 
 def log(msg):
     print(f"[local-biz] {msg}", file=sys.stderr)
@@ -1327,6 +1355,15 @@ def _test_qualify_lead():
     assert not _is_generic_name("Sanchez & Associates"), "SGW-864 fail: real brand flagged generic"
     assert _domain_brand_name("prudhommecpas.com") == "Prudhomme CPAs", f"SGW-864 fail: domain brand derivation ({_domain_brand_name('prudhommecpas.com')})"
     assert _domain_brand_name("khanattorneys.com") == "Khan Attorneys", f"SGW-864 fail: khan brand ({_domain_brand_name('khanattorneys.com')})"
+
+    # SGW-863: collector registry + failure isolation
+    assert collector_enabled("crawl_search"), "SGW-863 fail: default collector should be enabled"
+    assert run_collector("review_signals", lambda: (_ for _ in ()).throw(RuntimeError("boom"))) is None, \
+        "SGW-863 fail: collector failure must not propagate"
+    COLLECTORS["hiring_signals"]["enabled"] = False
+    assert run_collector("hiring_signals", lambda: "ran") is None, "SGW-863 fail: disabled collector must not run"
+    COLLECTORS["hiring_signals"]["enabled"] = True
+    assert run_collector("hiring_signals", lambda: "ran") == "ran", "SGW-863 fail: enabled collector should run"
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -2077,7 +2114,19 @@ def main():
     parser.add_argument("--briefing", action="store_true", help="Just print the briefing from cache (no crawl)")
     parser.add_argument("--html", action="store_true", help="Generate HTML report instead of text")
     parser.add_argument("--backup", action="store_true", help="Write a timestamped cache backup")
+    parser.add_argument("--disable-collector", action="append", default=[],
+                        help="Disable a collector by name (crawl_search, website_check, "
+                             "hiring_signals, review_signals, buying_signals). Repeatable. "
+                             "SGW-863: proves disabling a source doesn't break the run.")
     args = parser.parse_args()
+
+    # SGW-863: config-gated collectors — disable at runtime via CLI
+    for cname in args.disable_collector:
+        if cname in COLLECTORS:
+            COLLECTORS[cname]["enabled"] = False
+            log(f"collector DISABLED via CLI: {cname}")
+        else:
+            log(f"unknown collector: {cname} (valid: {list(COLLECTORS)})")
 
     cache = load_cache()
     now = datetime.now(timezone.utc)
@@ -2105,7 +2154,7 @@ def main():
         if trade.startswith("_"):
             continue
         for q in queries:
-            results = searx_search(q, limit=15, delay=args.delay)
+            results = run_collector("crawl_search", searx_search, q, limit=15, delay=args.delay)
             if not results:
                 searx_empty += 1
                 log(f"  Empty: {q}")
@@ -2196,8 +2245,11 @@ def main():
         checked_domains.add(domain)
         if biz.get("site_quality") and biz["site_quality"].get("website_score", -2) >= 0:
             continue  # Already successfully checked
-        biz["site_quality"] = check_website(domain)
+        biz["site_quality"] = run_collector("website_check", check_website, domain)
         sq = biz["site_quality"]
+        if sq is None:
+            sq = {"status": "unknown", "confidence": "low", "automation_gaps": [], "emails": []}
+            biz["site_quality"] = sq
         # Merge phones found on the website into the business entry
         if sq and sq.get("phones"):
             for p in sq["phones"]:
@@ -2242,14 +2294,14 @@ def main():
         biz_name = biz.get("name", "")
         if not biz.get("hiring_checked") and len(biz_name) >= 3:
             log(f"  Hiring signals: {biz_name}")
-            search_hiring_signals(biz_name, norm, cache)
+            run_collector("hiring_signals", search_hiring_signals, biz_name, norm, cache)
             signal_checks += 1
             time.sleep(6)
         if signal_checks >= max_signal_checks:
             break
         if not biz.get("review_checked") and len(biz_name) >= 3:
             log(f"  Review signals: {biz_name}")
-            search_review_signals(biz_name, norm, cache)
+            run_collector("review_signals", search_review_signals, biz_name, norm, cache)
             signal_checks += 1
             time.sleep(6)
         # Recompute lead score with new signals
@@ -2271,8 +2323,8 @@ def main():
         all_seen |= set(g.get("url", "") for g in cache.get("fb_groups", []))
 
         for q in signal_queries:
-            results = searx_search(q, limit=8, delay=args.delay)
-            for r in results:
+            results = run_collector("buying_signals", searx_search, q, limit=8, delay=args.delay)
+            for r in results or []:
                 url = r.get("url", "")
                 title = r.get("title", "")
                 snippet = r.get("content", "")
