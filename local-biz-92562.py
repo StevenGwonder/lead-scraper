@@ -51,7 +51,103 @@ AGGREGATOR_DOMAINS = {
     # Fix 1: Q&A sites, national directories, manufacturer pages
     "justanswer.com", "avvo.com", "gaf.com", "aaa.com",
     "quora.com", "medium.com", "blogspot.com",
+    # SGW-864: directory/listing sites the benchmark caught masquerading as
+    # real businesses (each scored Warm with a "verified" own site)
+    "lawyerland.com", "allbiz.com", "inlandempirelawyers.com",
+    "attorneyhelp.org", "headhuntersdirectory.com", "superlawyers.com",
+    "lawlink.com", "homeyou.com", "thetoolboxpro.com", "zomgthehandyman.com",
+    "repairhero.us", "legalrank.co", "wheree.com", "topconsumerreviews.com",
+    "qterrapropertymanagement.com", "dealmachine.com", "f6s.com",
+    "lawcrossing.com", "jenniejohnson.com", "areliableservices.com",
+    # National chains that sell the services themselves (not retainer buyers)
+    "bbsi.com", "usaa.com", "usaa.jobs.com",
 }
+
+# SGW-864: URL path signatures that identify directory/aggregator listings
+# even when the root domain is a real business's own site (e.g. /lawyers/).
+DIRECTORY_PATH_PATTERNS = [
+    r'/lawyers(?:/|$)', r'/attorneys?(?:/|$)', r'/listings?(?:/|$)',
+    r'/directory(?:/|$)', r'/service-areas?(?:/|$)', r'/locations?(?:/|$)',
+    r'/local(?:/|$)', r'/near-me(?:/|$)', r'/search(?:/|$)',
+    r'/costs(?:/|$)', r'/prices?(?:/|$)', r'/estimates?(?:/|$)',
+    r'/reviews?(?:/|$)', r'/ratings(?:/|$)', r'/top(?:/|$)',
+    r'/best(?:/|$)', r'/compare(?:/|$)', r'/find(?:/|$)',
+    r'/cflt=', r'/find_', r'/browse(?:/|$)',
+]
+
+# SGW-864: cleaned names that are SEO titles, not business brands.
+# These are rejected in the crawl loop and downgraded in the cache sweep.
+GENERIC_BUSINESS_NAME_PATTERNS = [
+    # Single trade word with no brand: "Handyman", "Accounting", "HVAC"
+    r'^(handyman|plumbing|plumber|electrician|electrical|hvac|ac repair|air conditioning|'
+    r'roofing|roofer|painting|painter|landscaping|landscape|tree service|tree removal|'
+    r'carpet cleaning|auto repair|mechanic|accounting|bookkeeping|tax|insurance|'
+    r'law|attorney|lawyer|consulting|recruiting|property management|home|care)$',
+    # "X in City" / "X Near ..." / "X Services" with no brand token
+    r'^(home repairs?|handyman services?|plumbing services?|ac repair|repair|services?)\s+(near|nearby|around|in)\b',
+    r'^[a-z]+ in (murrieta|temecula|wildomar|menifee|lake elsinore)',
+    r'^[a-z]+ (near|nearby|around) (me|murrieta|temecula|wildomar)',
+    r'^(best|top) .+ (in|near) ',
+]
+
+# SGW-864: distinctive-token guard — a signal (hiring/review) only counts for
+# a business when a NON-GENERIC name token appears in the source title/URL.
+# This stops "MBC Consulting Inc" matching posts about "Morgan Business Consulting".
+GENERIC_NAME_TOKENS = {
+    "services", "service", "company", "companies", "inc", "llc", "llp", "corp",
+    "group", "associates", "associate", "solutions", "firm", "agency",
+    "agencies", "office", "offices", "consulting", "consultants", "consultant",
+    "business", "businesses", "enterprises", "enterprise", "industries",
+    "partners", "partner", "professionals", "professional", "network",
+    "systems", "system", "technologies", "technology", "management", "managing",
+    "team", "the", "and", "for", "with", "your", "you", "our", "are",
+}
+
+# SGW-864/865: geography gate. Signals that explicitly mention a far-away
+# city (and none of our local cities) are noise, not evidence about a local
+# business. Covers the benchmark's ZipRecruiter/Yelp cross-geography leaks.
+LOCAL_CITIES = ("murrieta", "temecula", "wildomar", "menifee", "lake elsinore",
+                "lake elsinore ca", "riverside county", "southwest riverside")
+OUT_OF_AREA_CITIES = (
+    "new york", "brooklyn", "queens", "bronx", "staten island", "long island",
+    "san antonio", "austin", "houston", "dallas", "fort worth", "el paso",
+    "fayetteville", "chicago", "seattle", "portland", "denver", "phoenix",
+    "las vegas", "miami", "orlando", "tampa", "atlanta", "boston", "philadelphia",
+    "san francisco", "oakland", "san jose", "sacramento", "fresno", "bakersfield",
+    "los angeles", "long beach", "anaheim", "santa ana", "irvine", "san diego",
+    "campbell", "san jose", "santa clarita", "pasadena", "glendale", "torrance",
+)
+
+def _mentions_out_of_area(combined):
+    """True when a signal source is about a far-away city, not our geography.
+    Foreign city mentioned AND no local city mentioned → noise."""
+    combined_l = (combined or "").lower()
+    if any(c in combined_l for c in LOCAL_CITIES):
+        return False
+    return any(c in combined_l for c in OUT_OF_AREA_CITIES)
+
+def _distinctive_name_tokens(name):
+    """Return name tokens specific enough to match a business in search results.
+    Filters stop-words and generic suffixes; requires >= 5 chars."""
+    out = []
+    for w in re.findall(r'[a-z0-9]+', (name or "").lower()):
+        if len(w) >= 5 and w not in GENERIC_NAME_TOKENS:
+            out.append(w)
+    return out
+
+def _is_directory_record(url, name=""):
+    """SGW-864: True when a record is a directory/SEO listing, not a business.
+    Checks domain blocklist, URL path signatures, and generic SEO titles."""
+    url_l = (url or "").lower()
+    domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0]
+    if any(agg in domain for agg in AGGREGATOR_DOMAINS):
+        return True
+    if any(re.search(p, url_l) for p in DIRECTORY_PATH_PATTERNS):
+        return True
+    nm = (name or "").strip().lower()
+    if any(re.search(p, nm) for p in GENERIC_BUSINESS_NAME_PATTERNS):
+        return True
+    return False
 
 AGGREGATOR_TITLE_PATTERNS = [
     r'^\d+\s+(best|top)\s+', r'^top\s+\d+\s+', r'^the\s+\d+\s+best\s+',
@@ -662,8 +758,10 @@ def search_hiring_signals(biz_name, cache_key, cache):
         return bool(cached.get("hiring_signals", []))
 
     biz_name_lower = biz_name.lower()
-    # Short words (≤4 chars) match too broadly in URL/title fragments — skip name check for them
-    name_words = [w for w in biz_name_lower.split() if len(w) > 4]
+    # SGW-864: only DISTINCTIVE tokens may prove the source is about THIS business.
+    # Filters stop-words + generic suffixes ("consulting", "associates", "inc"…)
+    # so "MBC Consulting Inc" can't match "Morgan Business Consulting" posts.
+    name_words = _distinctive_name_tokens(biz_name)
 
     hiring_found = False
     role_match = False
@@ -682,6 +780,9 @@ def search_hiring_signals(biz_name, cache_key, cache):
             # T6: require biz name in title or URL to avoid unrelated aggregator pages
             name_present = any(w in title or w in url for w in name_words) if name_words else (biz_name_lower[:6] in title or biz_name_lower[:6] in url)
             if not (has_verb and name_present):
+                continue
+            # SGW-864/865: skip sources about far-away cities (ZipRecruiter noise)
+            if _mentions_out_of_area(title + " " + snippet):
                 continue
 
             hiring_found = True
@@ -719,10 +820,19 @@ def search_review_signals(biz_name, cache_key, cache):
     review_results = []
     negative_found = False
     results = searx_search(f"{biz_name} reviews", limit=8, delay=6)
+    name_words = _distinctive_name_tokens(biz_name)
     for r in results:
         title = (r.get("title", "") or "").lower()
         snippet = (r.get("content", "") or "").lower()
         combined = title + " " + snippet
+        # SGW-864: source must be plausibly about THIS business — distinctive
+        # name token in title/url, or (for known-review-site pages) any strong
+        # token. Kills cross-firm contamination from same-name companies.
+        if name_words and not any(w in title or w in (r.get("url", "") or "").lower() for w in name_words):
+            continue
+        # SGW-864/865: skip reviews about far-away cities (Yelp NYC noise)
+        if _mentions_out_of_area(combined):
+            continue
         # Check for complaint keywords
         complaints = [kw for kw in REVIEW_COMPLAINT_KEYWORDS if kw in combined]
         if complaints:
@@ -945,6 +1055,20 @@ def _test_qualify_lead():
                        {"status": "up", "confidence": "high", "website_score": 2,
                         "automation_gaps": [], "emails": []})
     assert r7["breakdown"]["named_pain"] == 0, f"T18 fail: single complaint → named_pain={r7['breakdown']['named_pain']}"
+
+    # SGW-864: directory/SEO records are rejected as businesses
+    assert _is_directory_record("https://lawyerland.com/lawyers/local/murrieta/ca"), "SGW-864 fail: lawyerland not flagged"
+    assert _is_directory_record("https://attorneyhelp.org/attorneys/ca_murrieta_lawyers.html"), "SGW-864 fail: attorneyhelp not flagged"
+    assert _is_directory_record("https://allbiz.com/business/mbc-consulting-inc_2q"), "SGW-864 fail: allbiz not flagged"
+    assert _is_directory_record("https://realbusiness.com/lawyers/murrieta"), "SGW-864 fail: /lawyers/ path not flagged"
+    assert _is_directory_record("https://realbusiness.com", "Handyman"), "SGW-864 fail: generic name not flagged"
+    assert not _is_directory_record("https://singletonsmith.com", "Singleton Smith Law Offices"), "SGW-864 fail: real business flagged"
+
+    # SGW-864: distinctive-token guard stops cross-firm contamination
+    assert _distinctive_name_tokens("MBC Consulting Inc") == [], "SGW-864 fail: generic-only name should yield no tokens"
+    assert "singleton" in _distinctive_name_tokens("Singleton Smith Law Offices"), "SGW-864 fail: distinctive token dropped"
+    assert _mentions_out_of_area("HVAC jobs in San Antonio, TX"), "SGW-864 fail: out-of-area not flagged"
+    assert not _mentions_out_of_area("HVAC jobs in Murrieta, CA"), "SGW-864 fail: local city flagged as out-of-area"
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -966,6 +1090,21 @@ def load_cache():
                 return v.get("last_seen", "") > cutoff
 
             cache["businesses"] = {k: v for k, v in cache.get("businesses", {}).items() if _keep(v)}
+            # SGW-864: sweep — any cached record that is now identifiable as a
+            # directory/SEO listing gets demoted to Cold + zeroed signals so it
+            # stops polluting the top of the report until re-crawled properly.
+            for biz in cache["businesses"].values():
+                url = biz.get("url", "") or (biz.get("own_domains") or [""])[0]
+                if _is_directory_record(url, biz.get("name", "")):
+                    biz["directory_record"] = True
+                    for k in ("hiring_signals", "review_signals", "hiring_role_match", "review_negative"):
+                        biz.pop(k, None)
+                    sq = biz.get("site_quality")
+                    if sq:
+                        sq["status"] = "unknown"
+                        sq["confidence"] = "low"
+                    biz["lead_score"] = {"score": 0, "tier": "Cold",
+                                         "breakdown": {}, "reasons": ["directory/SEO listing — not a real business"]}
             # Prune stale signals/fb_groups (no date field → keep to be safe)
             cache["signals"] = [s for s in cache.get("signals", []) if s.get("date", "z") > cutoff_sig]
             cache["fb_groups"] = [g for g in cache.get("fb_groups", []) if g.get("date", "z") > cutoff_sig]
@@ -1717,6 +1856,9 @@ def main():
                     continue
                 name = clean_name(title)
                 if len(name) < 3:
+                    continue
+                # SGW-864: directory/SEO records never enter the cache as businesses
+                if _is_directory_record(url, name):
                     continue
                 urlkey = re.sub(r'https?://(www\.)?', '', url.lower()).rstrip('/')
                 if urlkey in seen_urls:

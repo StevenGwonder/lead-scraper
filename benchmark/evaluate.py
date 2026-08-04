@@ -78,6 +78,16 @@ def main():
             missing += 1
             continue
         biz = reconstruct_biz(entry)
+        # Mirror the SGW-864 cache sweep from load_cache(): records now
+        # identifiable as directory/SEO listings are demoted before scoring,
+        # exactly as the live pipeline would treat them on next load.
+        url = entry.get("url", "") or (entry.get("own_domains") or [""])[0]
+        if pipe._is_directory_record(url, entry.get("name", "")):
+            biz["site_quality"] = {"status": "unknown", "confidence": "low"}
+            score = {"score": 0, "tier": "Cold", "breakdown": {},
+                     "reasons": ["directory/SEO listing — not a real business"]}
+            ranked.append((0, key, entry, labels[key], score))
+            continue
         try:
             score = pipe.qualify_lead(biz, biz["site_quality"])
         except Exception as e:  # noqa: BLE001 — a broken fixture row must not kill the eval
@@ -101,7 +111,7 @@ def main():
     print(f"top-{args.top} false positives: {len(fp_top10)}  {fp_top10}")
     print(f"unverified (label=unknown): {len(unverified)}  {unverified}")
 
-    # Tier confusion matrix: pipeline tier (fixture) vs human label
+    # Tier confusion matrix: re-scored pipeline tier vs human label
     print("\nTier × label confusion (rows=pipeline tier, cols=human label):")
     tiers = ["Warm", "Cold", "Unverified"]
     labels_order = ["good_fit", "possible_fit", "bad_fit", "unknown"]
@@ -109,8 +119,8 @@ def main():
     print(header)
     for t in tiers:
         row = {l: 0 for l in labels_order}
-        for _, _, entry, lbl, _ in ranked:
-            if entry.get("tier") == t:
+        for _, _, entry, lbl, score in ranked:
+            if score.get("tier") == t:
                 row[lbl.get("label")] = row.get(lbl.get("label"), 0) + 1
         total = sum(row.values())
         print(f"{t:10}" + "".join(f"{row[l]:>12}" for l in labels_order) + f"    {total}")
