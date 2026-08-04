@@ -82,10 +82,11 @@ def main():
         # identifiable as directory/SEO listings are demoted before scoring,
         # exactly as the live pipeline would treat them on next load.
         url = entry.get("url", "") or (entry.get("own_domains") or [""])[0]
-        if pipe._is_directory_record(url, entry.get("name", "")):
+        if (pipe._is_directory_record(url, entry.get("name", ""))
+                or pipe._mentions_out_of_area(entry.get("name", "") + " " + url)):
             biz["site_quality"] = {"status": "unknown", "confidence": "low"}
             score = {"score": 0, "tier": "Cold", "breakdown": {},
-                     "reasons": ["directory/SEO listing — not a real business"]}
+                     "reasons": ["directory/out-of-area record — not a local business"]}
             ranked.append((0, key, entry, labels[key], score))
             continue
         try:

@@ -312,7 +312,9 @@ SCORING = {
     "growth_budget": {          # T5: Can they pay a retainer? Are they straining?
         "max": 25,
         "automatable_role": 25,         # hiring receptionist/scheduler/intake/etc.
+        "automatable_role_weak": 15,    # role match but only aggregator-echo evidence
         "generic_hiring": 12,           # generic hiring signal
+        "generic_hiring_weak": 6,       # generic hiring, aggregator-echo only
         "multi_signal": 8,              # 2+ phones OR 2+ domains = operational complexity
         "trade_admin": 8,               # ADMIN_TRADES prior (verified only)
         "trade_appt": 5,                # appointment trade prior (verified only)
@@ -954,16 +956,28 @@ def qualify_lead(biz, sq):
         reasons.append("single complaint mention — needs corroboration to score")
     breakdown["named_pain"] = min(np_score, NP["max"])
 
-    # ── GROWTH & BUDGET (T5) ──
+    # ── GROWTH & BUDGET (T5, SGW-866 evidence weighting) ──
+    # SGW-866: weight hiring evidence by source strength — a job posting on the
+    # business's OWN site is hard proof; an aggregator echo (ZipRecruiter etc.)
+    # is weak and gets halved so it can't fake a retainer budget.
     gb = 0
     hiring_role_match = biz.get("hiring_role_match", False)
     hiring_signals = biz.get("hiring_signals", [])
+    strong_hiring = any(s.get("source_kind") == "own_site" for s in hiring_signals) if hiring_signals else False
     if hiring_role_match:
-        gb += GB["automatable_role"]
-        reasons.append(f"hiring for an automatable role (+{GB['automatable_role']})")
+        if strong_hiring:
+            gb += GB["automatable_role"]
+            reasons.append(f"hiring for an automatable role — on own site (+{GB['automatable_role']})")
+        else:
+            gb += GB["automatable_role_weak"]
+            reasons.append(f"hiring for an automatable role — aggregator echo only (+{GB['automatable_role_weak']})")
     elif hiring_signals:
-        gb += GB["generic_hiring"]
-        reasons.append(f"generic hiring signal (+{GB['generic_hiring']})")
+        if strong_hiring:
+            gb += GB["generic_hiring"]
+            reasons.append(f"generic hiring signal — on own site (+{GB['generic_hiring']})")
+        else:
+            gb += GB["generic_hiring_weak"]
+            reasons.append(f"generic hiring signal — aggregator echo only (+{GB['generic_hiring_weak']})")
     elif verified:
         # Trade prior: operational complexity proxy — only when we read the site (T13)
         if trade in ADMIN_TRADES:
@@ -1015,15 +1029,45 @@ def qualify_lead(biz, sq):
     # ── CONTACTABILITY GATE (T4) ──
     contactable = bool(phones_list) or bool(emails)
 
-    # ── TIER RULES (T5) ──
-    # Hot: contactable AND (named pain OR automatable-role hiring OR verified admin/ops) AND ≥65
+    # ── SGW-866: DIMENSION MODEL ──────────────────────────────────────
+    # Separate WHY a prospect matters instead of one blended number:
+    #   fit         — lane fit for a digital-worker retainer (0-10)
+    #   pain        — named, corroborated operational pain (0-10)
+    #   capacity    — ability/willingness to pay (hiring, size, budget proxy) (0-10)
+    #   actionability — can we reach them + evidence confidence (0-10)
+    pain_dim = min(10, breakdown["named_pain"] // 2)
+    if pain_dim == 0 and biz.get("review_negative"):
+        pain_dim = 2  # uncorroborated complaint = weak signal, not zero
+    fit_dim = 0
+    if verified:
+        fit_dim = 10 if trade in ADMIN_TRADES else (7 if trade in SCORING["appointment_trades"] else 4)
+    capacity_dim = min(10, breakdown["growth_budget"] // 2)
+    action_dim = 0
+    if contactable:
+        action_dim += 5
+    if verified:
+        action_dim += 3
+    if any(biz.get(k) for k in ("review_negative", "hiring_role_match", "hiring_signals")):
+        action_dim += 2
+    dimensions = {
+        "fit": fit_dim,
+        "pain": pain_dim,
+        "capacity": capacity_dim,
+        "actionability": min(10, action_dim),
+    }
+
+    # ── SGW-866: DETERMINISTIC ROUTING (replaces blended-tier-only rules) ──
+    # priority — real, contactable, admin/ops-heavy, AND a reason (pain or
+    # hiring or strong trade prior). Gap-stacking can never route here.
     hot_qualifier = (
         (biz.get("review_negative") and corroborated(review_signals))
         or hiring_role_match
         or (trade in ADMIN_TRADES and verified)
     )
-    if contactable and hot_qualifier and total >= SCORING["tiers"]["hot"]:
+    if (contactable and hot_qualifier and total >= SCORING["tiers"]["hot"]
+            and pain_dim + capacity_dim >= 8):
         tier = "Hot"
+    # watch — contactable and credible but no strong reason yet
     elif contactable and total >= SCORING["tiers"]["warm"]:
         tier = "Warm"
     else:
@@ -1038,7 +1082,8 @@ def qualify_lead(biz, sq):
             and not contactable):
         tier = "Unverified"
 
-    return {"score": total, "tier": tier, "breakdown": breakdown, "reasons": reasons}
+    return {"score": total, "tier": tier, "breakdown": breakdown,
+            "dimensions": dimensions, "reasons": reasons}
 
 
 def _test_qualify_lead():
@@ -1121,6 +1166,30 @@ def _test_qualify_lead():
     assert _evidence_source_kind("https://www.ziprecruiter.com/Jobs/Bookkeeping") == "job_board", "SGW-865 fail: ziprecruiter not job_board"
     assert _evidence_source_kind("https://www.yelp.com/biz/singleton-smith") == "review_site", "SGW-865 fail: yelp not review_site"
     assert _evidence_source_kind("https://singletonsmith.com/careers") == "own_site", "SGW-865 fail: own site not own_site"
+
+    # SGW-866: dimension model present + gap-stacking can't reach Hot
+    r8 = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
+                        "own_domains": ["e.com"], "hiring_signals": [],
+                        "review_negative": False, "review_signals": []},
+                       {"status": "up", "confidence": "high", "website_score": 0,
+                        "automation_gaps": ["no booking system", "no CRM", "no marketing tools"], "emails": []})
+    assert "dimensions" in r8, "SGW-866 fail: dimensions missing"
+    assert r8["tier"] != "Hot", f"SGW-866 fail: gap-stacking reached Hot (score={r8['score']})"
+    assert r8["dimensions"]["actionability"] >= 8, f"SGW-866 fail: contactable+verified should be actionable ({r8['dimensions']})"
+
+    # SGW-866: weak (aggregator-echo) hiring scores less than own-site hiring
+    r9a = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
+                         "own_domains": ["f.com"], "hiring_role_match": True,
+                         "hiring_signals": [{"source_kind": "own_site", "title": "x"}],
+                         "review_negative": False, "review_signals": []},
+                        {"status": "up", "confidence": "high", "website_score": 3, "automation_gaps": [], "emails": []})
+    r9b = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
+                         "own_domains": ["g.com"], "hiring_role_match": True,
+                         "hiring_signals": [{"source_kind": "job_board", "title": "x"}],
+                         "review_negative": False, "review_signals": []},
+                        {"status": "up", "confidence": "high", "website_score": 3, "automation_gaps": [], "emails": []})
+    assert r9a["breakdown"]["growth_budget"] > r9b["breakdown"]["growth_budget"], \
+        f"SGW-866 fail: own-site hiring should outscore aggregator echo ({r9a['breakdown']['growth_budget']} vs {r9b['breakdown']['growth_budget']})"
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -1147,7 +1216,8 @@ def load_cache():
             # stops polluting the top of the report until re-crawled properly.
             for biz in cache["businesses"].values():
                 url = biz.get("url", "") or (biz.get("own_domains") or [""])[0]
-                if _is_directory_record(url, biz.get("name", "")):
+                if (_is_directory_record(url, biz.get("name", ""))
+                        or _mentions_out_of_area(biz.get("name", "") + " " + url)):
                     biz["directory_record"] = True
                     for k in ("hiring_signals", "review_signals", "hiring_role_match", "review_negative"):
                         biz.pop(k, None)
@@ -1911,6 +1981,10 @@ def main():
                     continue
                 # SGW-864: directory/SEO records never enter the cache as businesses
                 if _is_directory_record(url, name):
+                    continue
+                # SGW-864/865: out-of-geography records (e.g. a Campbell CA firm
+                # surfacing in a Murrieta query) never enter the cache either
+                if _mentions_out_of_area(name + " " + url):
                     continue
                 urlkey = re.sub(r'https?://(www\.)?', '', url.lower()).rstrip('/')
                 if urlkey in seen_urls:

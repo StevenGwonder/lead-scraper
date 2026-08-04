@@ -63,6 +63,28 @@ def anonymize_emails(emails):
     return [f"contact{idx}@anonymized.example" for idx, _ in enumerate(emails or [])]
 
 
+def enrich_signals(signals, kind_key):
+    """Mirror what the live collectors now store (SGW-865): each signal carries
+    source_kind, recency, and observed_at. The fixture predates those fields;
+    backfilling them keeps the benchmark measuring the CURRENT pipeline."""
+    import re as _re
+    from datetime import datetime, timezone
+
+    out = []
+    for s in signals or []:
+        s = dict(s)
+        if "source_kind" not in s:
+            s["source_kind"] = "job_board" if kind_key == "hiring" else "review_site"
+        if "recency" not in s:
+            t = (s.get("title", "") + " " + s.get("snippet", "")).lower()
+            m = _re.search(r"\b(20\d{2})\b", t)
+            s["recency"] = "stale" if (m and int(m.group(1)) < datetime.now(timezone.utc).year - 1) else "unknown"
+        if "observed_at" not in s:
+            s["observed_at"] = "2026-06-01T00:00:00+00:00"
+        out.append(s)
+    return out
+
+
 def is_false_positive_archetype(biz):
     """Heuristic flags for crawler artifacts — used for sampling, not scoring."""
     name = (biz.get("name") or "").strip().lower()
@@ -177,9 +199,9 @@ def main():
             "emails_anonymized": anonymize_emails(b.get("emails")),
             "own_domains": b.get("own_domains", []),
             "hiring_role_match": b.get("hiring_role_match", False),
-            "hiring_signals": b.get("hiring_signals", []),
+            "hiring_signals": enrich_signals(b.get("hiring_signals", []), "hiring"),
             "review_negative": b.get("review_negative", False),
-            "review_signals": b.get("review_signals", []),
+            "review_signals": enrich_signals(b.get("review_signals", []), "review"),
             "site_quality": sq,
             "archetype": "false_positive" if key in {k for k, _ in forced_fp} else
                         "contact_worthy" if key in {k for k, _ in forced_cw} else "cross_section",
