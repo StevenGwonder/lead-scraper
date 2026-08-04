@@ -126,6 +126,40 @@ def _mentions_out_of_area(combined):
         return False
     return any(c in combined_l for c in OUT_OF_AREA_CITIES)
 
+def _signal_recency(title, snippet=""):
+    """SGW-865: classify a hiring/posted signal by how fresh it is.
+    Returns 'recent' (same/previous year or explicit month in last 15 mo),
+    'stale' (older years), or 'unknown' (no date marker).
+    Job postings rot: a 'Bookkeeper wanted' page from 2024 is not evidence
+    the business is hiring now."""
+    combined = (title or "") + " " + (snippet or "")
+    now_year = datetime.now(timezone.utc).year
+    m = re.search(r'\b(20\d{2})\b', combined)
+    if m:
+        year = int(m.group(1))
+        if year >= now_year - 1:
+            return "recent"
+        return "stale"
+    m = re.search(r'\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[.\s,]*\s?(20\d{2})?\b', combined, re.I)
+    if m:
+        # Month present without year → recent (job boards list current postings)
+        return "recent"
+    return "unknown"
+
+def _evidence_source_kind(url):
+    """SGW-865: classify where an evidence source lives.
+    own_site = the business's own domain (strongest); job_board = aggregator
+    (weak); other = anything else (medium)."""
+    url_l = (url or "").lower()
+    domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0]
+    if any(s in domain for s in ("ziprecruiter", "indeed", "linkedin", "careerbuilder",
+                                  "monster", "glassdoor", "lawcrossing", "usajobs")):
+        return "job_board"
+    if any(s in domain for s in ("yelp", "google.com", "bbb", "trustpilot",
+                                  "glassdoor", "wallethub", "consumeraffairs")):
+        return "review_site"
+    return "own_site"
+
 def _distinctive_name_tokens(name):
     """Return name tokens specific enough to match a business in search results.
     Filters stop-words and generic suffixes; requires >= 5 chars."""
@@ -784,6 +818,11 @@ def search_hiring_signals(biz_name, cache_key, cache):
             # SGW-864/865: skip sources about far-away cities (ZipRecruiter noise)
             if _mentions_out_of_area(title + " " + snippet):
                 continue
+            # SGW-865: stale postings (2024 'Bookkeeper wanted') are not
+            # evidence of hiring now. Only recent/undated signals count.
+            recency = _signal_recency(title, snippet)
+            if recency == "stale":
+                continue
 
             hiring_found = True
             # T6: flag automatable role if mentioned
@@ -793,6 +832,9 @@ def search_hiring_signals(biz_name, cache_key, cache):
                 "title": r.get("title", "")[:70],
                 "snippet": (r.get("content", "") or "")[:120],
                 "url": r.get("url", ""),
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+                "recency": recency,
+                "source_kind": _evidence_source_kind(r.get("url", "")),
             })
         if hiring_found:
             break
@@ -844,6 +886,8 @@ def search_review_signals(biz_name, cache_key, cache):
                 "snippet": (r.get("content", "") or "")[:120],
                 "url": r.get("url", ""),
                 "complaints": complaints,
+                "observed_at": datetime.now(timezone.utc).isoformat(),
+                "source_kind": _evidence_source_kind(r.get("url", "")),
             })
     
     # Store in cache
@@ -1069,6 +1113,14 @@ def _test_qualify_lead():
     assert "singleton" in _distinctive_name_tokens("Singleton Smith Law Offices"), "SGW-864 fail: distinctive token dropped"
     assert _mentions_out_of_area("HVAC jobs in San Antonio, TX"), "SGW-864 fail: out-of-area not flagged"
     assert not _mentions_out_of_area("HVAC jobs in Murrieta, CA"), "SGW-864 fail: local city flagged as out-of-area"
+
+    # SGW-865: recency + evidence provenance
+    assert _signal_recency("Bookkeeper Job 2024") == "stale", "SGW-865 fail: 2024 not stale"
+    assert _signal_recency("Bookkeeper Job 2026") == "recent", "SGW-865 fail: 2026 not recent"
+    assert _signal_recency("Now Hiring Receptionist") == "unknown", "SGW-865 fail: undated should be unknown"
+    assert _evidence_source_kind("https://www.ziprecruiter.com/Jobs/Bookkeeping") == "job_board", "SGW-865 fail: ziprecruiter not job_board"
+    assert _evidence_source_kind("https://www.yelp.com/biz/singleton-smith") == "review_site", "SGW-865 fail: yelp not review_site"
+    assert _evidence_source_kind("https://singletonsmith.com/careers") == "own_site", "SGW-865 fail: own site not own_site"
     print("qualify_lead self-check: all assertions passed")
 
 
