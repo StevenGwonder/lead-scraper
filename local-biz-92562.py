@@ -578,7 +578,11 @@ def is_aggregator(title, url):
 
 
 def extract_phones(text):
-    """Extract US phone numbers. Fix 6: broader regex for more formats."""
+    """Extract US phone numbers. Fix 6: broader regex for more formats.
+    Research 2026-08: NANP validation — area code must be real (200-989, not
+    starting with 0/1), exchange must not be all-zeros or a reserved test prefix
+    (555). Crawler garbage like (100) 091-4084 or (178) 137-3717 must not count
+    as a contact path."""
     # Match: (951) 225-1131, 951-225-1131, 951.225.1131, 951 225 1131, 9512251131
     phones = re.findall(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
     seen, result = set(), []
@@ -588,12 +592,16 @@ def extract_phones(text):
         if len(digits) == 11 and digits.startswith('1'):
             digits = digits[1:]
         if digits not in seen and len(digits) == 10:
-            # Skip area codes that are clearly not real (000 = invalid, 999 = test)
-            if not digits.startswith(('000', '999')):
-                seen.add(digits)
-                # Normalize format: (XXX) XXX-XXXX
-                formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-                result.append(formatted)
+            ac = int(digits[:3])
+            exchange = int(digits[3:6])
+            # NANP: area code 200-989 (not 0/1 start, not N11 like 411/911),
+            # exchange not all-zero (000) and not reserved test (555)
+            if not (200 <= ac <= 989 and ac % 100 != 11) or exchange in (0, 555):
+                continue
+            seen.add(digits)
+            # Normalize format: (XXX) XXX-XXXX
+            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+            result.append(formatted)
     return result[:3]
 
 
@@ -1364,6 +1372,16 @@ def _test_qualify_lead():
     assert run_collector("hiring_signals", lambda: "ran") is None, "SGW-863 fail: disabled collector must not run"
     COLLECTORS["hiring_signals"]["enabled"] = True
     assert run_collector("hiring_signals", lambda: "ran") == "ran", "SGW-863 fail: enabled collector should run"
+
+    # Research 2026-08: NANP phone validation + outcome-first pitch lines
+    assert extract_phones("Call (951) 555-1234 today") == [], "research fail: 555 exchange must be rejected"
+    assert extract_phones("Call (100) 091-4084") == [], "research fail: invalid area code must be rejected"
+    assert extract_phones("Call (951) 225-1131") == ["(951) 225-1131"], "research fail: real phone rejected"
+    assert extract_phones("Call (178) 137-3717") == [], "research fail: 178 area code must be rejected"
+    p = pitch_for({"trade": "Accounting", "review_negative": True})
+    assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
+    p2 = pitch_for({"trade": "Law Office"})
+    assert "billable" in p2, f"research fail: admin pitch not outcome-first ({p2})"
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -1810,22 +1828,23 @@ details summary:hover { color: var(--blue); }
 
 
 def pitch_for(biz):
-    """T9: Derive a plain-English pitch line from the top buying signal.
+    """T9 + research 2026-08: Derive an OUTCOME-first pitch line (research:
+    'businesses don't buy AI calls, they buy outcomes').
     ponytail: priority table, first match wins."""
     trade = biz.get("trade", "")
     if biz.get("review_negative"):
-        return "24/7 digital receptionist that answers + books every call — fix the slow-response complaints"
+        return "never miss another intake call — customers say you're slow to respond, we fix that"
     if biz.get("hiring_role_match"):
-        return "replace the role you're hiring for with a digital worker (no salary, no sick days)"
+        return "skip the hire — a digital worker does the role you're posting for, without the salary"
     if trade in ADMIN_TRADES:
-        return "digital worker for intake, scheduling & follow-up — frees your staff for billable work"
+        return "intake, scheduling & follow-up on autopilot — frees your staff for billable work"
     if biz.get("hiring_signals"):
-        return "automate the role you're hiring for before you post the job"
+        return "automate the workload behind the job you're hiring for — before you pay the posting"
     sq = biz.get("site_quality") or {}
     gaps = sq.get("automation_gaps", [])
     if any(g in gaps for g in ("no booking system", "no booking/chat system")):
-        return "automated booking + reminders — capture every call that goes to voicemail"
-    return "digital worker to handle intake, scheduling & follow-up"
+        return "book every call that hits voicemail — automated booking + reminders, no more missed revenue"
+    return "digital worker for intake, scheduling & follow-up — no more hold music"
 
 
 def lead_score_badge(tier, score):
