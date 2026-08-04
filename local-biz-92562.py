@@ -61,18 +61,33 @@ AGGREGATOR_DOMAINS = {
     "lawcrossing.com", "jenniejohnson.com", "areliableservices.com",
     # National chains that sell the services themselves (not retainer buyers)
     "bbsi.com", "usaa.com", "usaa.jobs.com",
+    # SGW-864 round 2 (live-cache sweep): directories/networks only —
+    # NOT real firms' own domains (those are handled via domain-brand re-key)
+    "law.cornell.edu", "whereorg.com", "alignable.com",
+    # SGW-864 round 3: more directories + national SaaS pages that look local
+    "lawyers.com", "martindale.com", "propertymanagementlist.com",
+    "staffingagenciesca.com", "hemlane.com",
+    # SGW-864 round 4: chamber CMS directory pages
+    "gochambermaster.com", "chambermaster.com",
 }
 
-# SGW-864: URL path signatures that identify directory/aggregator listings
-# even when the root domain is a real business's own site (e.g. /lawyers/).
-DIRECTORY_PATH_PATTERNS = [
+# SGW-864: URL path signatures that identify directory/aggregator listings.
+# Split STRONG (listing pages — never a business, demote regardless of name)
+# from WEAK (local-SEO pages that CAN be a real business's own page — only
+# demote when the record's name is also generic, so "Benson Electric" on
+# bensonelectricsd.com/service-area/temecula-ca stays a lead).
+DIRECTORY_PATH_PATTERNS_STRONG = [
     r'/lawyers(?:/|$)', r'/attorneys?(?:/|$)', r'/listings?(?:/|$)',
-    r'/directory(?:/|$)', r'/service-areas?(?:/|$)', r'/locations?(?:/|$)',
-    r'/local(?:/|$)', r'/near-me(?:/|$)', r'/search(?:/|$)',
-    r'/costs(?:/|$)', r'/prices?(?:/|$)', r'/estimates?(?:/|$)',
-    r'/reviews?(?:/|$)', r'/ratings(?:/|$)', r'/top(?:/|$)',
-    r'/best(?:/|$)', r'/compare(?:/|$)', r'/find(?:/|$)',
-    r'/cflt=', r'/find_', r'/browse(?:/|$)',
+    r'/directory(?:/|$)', r'/search(?:/|$)', r'/cflt=', r'/find_', r'/browse(?:/|$)',
+    r'/near-me(?:/|$)', r'/costs(?:/|$)', r'/prices?(?:/|$)', r'/estimates?(?:/|$)',
+    r'/reviews?(?:/|$)', r'/ratings(?:/|$)', r'/top(?:/|$)', r'/best(?:/|$)',
+    r'/compare(?:/|$)', r'/find(?:/|$)', r'/all-legal-issues(?:/|$)', r'/all-lawyers(?:/|$)',
+    r'/category(?:/|$)', r'/list(?:/|$)', r'/business(?:/|$)', r'/profile(?:/|$)',
+]
+DIRECTORY_PATH_PATTERNS_WEAK = [
+    r'/service-areas?(?:/|$)', r'/locations?(?:/|$)', r'/local(?:/|$)',
+    r'/cities(?:/|$)', r'/white-label(?:/|$)', r'/property-management(?:/|$)',
+    r'/contact-us(?:/|$)',
 ]
 
 # SGW-864: cleaned names that are SEO titles, not business brands.
@@ -88,6 +103,11 @@ GENERIC_BUSINESS_NAME_PATTERNS = [
     r'^[a-z]+ in (murrieta|temecula|wildomar|menifee|lake elsinore)',
     r'^[a-z]+ (near|nearby|around) (me|murrieta|temecula|wildomar)',
     r'^(best|top) .+ (in|near) ',
+    # SGW-864 round 3: bare trade+suffix, service-description names, list pages
+    r'^(bookkeeping|accounting|tax|insurance|property management|staffing|recruiting|consulting)\s+(service|services|firm|firms|agency|agencies|company|companies|solutions?|group|pros?|professionals?)$',
+    r'^(the\s+)?(best|top|great)\s+\w+\s+(near|in|for)\b',
+    r'^(property management|staffing|recruiting|consulting)\s+companies?(\s+list)?$',
+    r'^(find|view|browse|see|get)\s+(the\s+)?(best|top)?',
 ]
 
 # SGW-864: distinctive-token guard — a signal (hiring/review) only counts for
@@ -171,17 +191,100 @@ def _distinctive_name_tokens(name):
 
 def _is_directory_record(url, name=""):
     """SGW-864: True when a record is a directory/SEO listing, not a business.
-    Checks domain blocklist, URL path signatures, and generic SEO titles."""
+    Checks domain blocklist, STRONG path signatures (listing pages), and
+    generic SEO names. WEAK path signatures only demote when the name is also
+    generic — a real brand on its own /service-area/ page stays a lead."""
     url_l = (url or "").lower()
     domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0]
-    if any(agg in domain for agg in AGGREGATOR_DOMAINS):
+    # Domain-boundary match, NOT substring: "lawyers.com" must not match
+    # "prfamilylawyers.com" (a real firm). Exact domain or subdomain-of.
+    if any(domain == agg or domain.endswith("." + agg) for agg in AGGREGATOR_DOMAINS):
         return True
-    if any(re.search(p, url_l) for p in DIRECTORY_PATH_PATTERNS):
+    if any(re.search(p, url_l) for p in DIRECTORY_PATH_PATTERNS_STRONG):
         return True
     nm = (name or "").strip().lower()
-    if any(re.search(p, nm) for p in GENERIC_BUSINESS_NAME_PATTERNS):
+    if any(re.search(p, url_l) for p in DIRECTORY_PATH_PATTERNS_WEAK) and not nm:
+        return True
+    if _is_generic_name(nm):
         return True
     return False
+
+# SGW-864 round 2: page-title records ("Contact Us", "About", "Careers") and
+# modifier-generic names ("White-Label Bookkeeping Services", "Temecula CPA, CPA")
+# are not business brands — they get re-keyed to their domain brand instead.
+GENERIC_PAGE_TITLE_PATTERNS = [
+    r'^(contact|about|home|careers|services?|products?|locations?|team|faq|blog|news)\s*(us|our|the)?\s*$',
+    r'^(our|the)\s+(services?|team|story|company|firm|office)',
+]
+GENERIC_MODIFIER_PATTERNS = [
+    r'^(white[- ]label|professional|full[- ]service|complete|premier|trusted|reliable|experienced|local|best|top)\s+',
+    r'^[a-z\s-]+,?\s+(cpa|cpas|lawyers?|attorneys?|bookkeeping|accounting|tax\s*service|insurance|consulting|recruiting)\s*,?\s+(cpa|cpas)?$',
+]
+
+def _is_generic_name(name):
+    """True when a cleaned name is a generic SEO/page title, not a brand."""
+    nm = (name or "").strip().lower()
+    if not nm or len(nm) < 3:
+        return True
+    if any(re.search(p, nm) for p in GENERIC_BUSINESS_NAME_PATTERNS):
+        return True
+    if any(re.search(p, nm) for p in GENERIC_PAGE_TITLE_PATTERNS):
+        return True
+    if any(re.search(p, nm) for p in GENERIC_MODIFIER_PATTERNS):
+        return True
+    return False
+
+# SGW-864: known domain-word split points for brand derivation
+_DOMAIN_BRAND_WORDS = [
+    "accounting", "bookkeeping", "consulting", "insurance", "attorneys", "attorney",
+    "lawyers", "lawyer", "legal", "realty", "properties", "property", "management",
+    "group", "solutions", "company", "firm", "associates", "partner", "partners",
+    "landscaping", "plumbing", "electrical", "electric", "roofing", "painting",
+    "heating", "cooling", "repair", "mechanical", "construction", "remodeling",
+    "cleaning", "carpet", "mobile", "tech", "technologies", "systems", "media",
+    "marketing", "advisors", "advisory", "financial", "finance", "capital",
+    "investment", "holdings", "services", "service", "design", "studios", "studio",
+    "cpa", "cpas", "tax", "landscape", "tree", "handyman", "plumber", "roofing",
+]
+
+def _domain_brand_name(domain):
+    """SGW-864: derive a human brand from a registrable domain.
+    'prudhommecpas.com' → 'Prudhomme CPAs'; 'khanattorneys.com' → 'Khan Attorneys'.
+    Falls back to the title-cased domain when nothing is derivable."""
+    d = re.sub(r'^(https?://)?(www\.)?', '', (domain or "").lower())
+    d = re.sub(r'\.[a-z]{2,4}(/.*)?$', '', d).rstrip('/')
+    # split on known business words (longest match wins)
+    tokens = []
+    rest = d
+    while rest:
+        matched = None
+        for w in sorted(_DOMAIN_BRAND_WORDS, key=len, reverse=True):
+            if rest.endswith(w) and len(rest) > len(w):
+                matched = w
+                break
+        if matched:
+            tokens.append(matched)
+            rest = rest[: -len(matched)]
+        else:
+            # camelcase split, then take the rest as one token
+            rest = re.sub(r'([a-z])([A-Z])', r'\1 \2', rest)
+            parts = re.split(r'[-_.]+', rest)
+            tokens.extend(parts)
+            rest = ""
+    tokens = [t for t in reversed(tokens) if t]
+    if not tokens:
+        return ""
+    stop = {"the", "and", "of", "for", "in", "ca", "inc", "llc", "llp", "co"}
+    tokens = [t for t in tokens if t not in stop][:3]
+    parts = []
+    for t in tokens:
+        if t == "cpa":
+            parts.append("CPAs")
+        elif t == "cpas":
+            parts.append("CPAs")
+        else:
+            parts.append(t[:1].upper() + t[1:])
+    return " ".join(parts)
 
 AGGREGATOR_TITLE_PATTERNS = [
     r'^\d+\s+(best|top)\s+', r'^top\s+\d+\s+', r'^the\s+\d+\s+best\s+',
@@ -1190,6 +1293,13 @@ def _test_qualify_lead():
                         {"status": "up", "confidence": "high", "website_score": 3, "automation_gaps": [], "emails": []})
     assert r9a["breakdown"]["growth_budget"] > r9b["breakdown"]["growth_budget"], \
         f"SGW-866 fail: own-site hiring should outscore aggregator echo ({r9a['breakdown']['growth_budget']} vs {r9b['breakdown']['growth_budget']})"
+
+    # SGW-864 round 2: generic names → domain-brand re-key
+    assert _is_generic_name("Contact Us"), "SGW-864 fail: Contact Us not generic"
+    assert _is_generic_name("Temecula CPA, CPA"), "SGW-864 fail: Temecula CPA, CPA not generic"
+    assert not _is_generic_name("Sanchez & Associates"), "SGW-864 fail: real brand flagged generic"
+    assert _domain_brand_name("prudhommecpas.com") == "Prudhomme CPAs", f"SGW-864 fail: domain brand derivation ({_domain_brand_name('prudhommecpas.com')})"
+    assert _domain_brand_name("khanattorneys.com") == "Khan Attorneys", f"SGW-864 fail: khan brand ({_domain_brand_name('khanattorneys.com')})"
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -1227,6 +1337,13 @@ def load_cache():
                         sq["confidence"] = "low"
                     biz["lead_score"] = {"score": 0, "tier": "Cold",
                                          "breakdown": {}, "reasons": ["directory/SEO listing — not a real business"]}
+                    continue
+                # SGW-864 round 2: generic SEO names on real own-sites get the
+                # domain brand instead of junk ("Contact Us" → "Khan Attorneys").
+                if _is_generic_name(biz.get("name", "")) and biz.get("own_domains"):
+                    brand = _domain_brand_name(biz["own_domains"][0])
+                    if brand:
+                        biz["name"] = brand
             # Prune stale signals/fb_groups (no date field → keep to be safe)
             cache["signals"] = [s for s in cache.get("signals", []) if s.get("date", "z") > cutoff_sig]
             cache["fb_groups"] = [g for g in cache.get("fb_groups", []) if g.get("date", "z") > cutoff_sig]
@@ -1986,6 +2103,14 @@ def main():
                 # surfacing in a Murrieta query) never enter the cache either
                 if _mentions_out_of_area(name + " " + url):
                     continue
+                # SGW-864 round 2: generic SEO titles on real own-site pages
+                # ("Contact Us", "Temecula CPA, CPA") get re-keyed to the domain
+                # brand — real firms keep their identity, junk names get fixed.
+                if _is_generic_name(name):
+                    domain0 = re.sub(r'https?://(www\.)?', '', url.lower()).split('/')[0]
+                    brand = _domain_brand_name(domain0)
+                    if brand:
+                        name = brand
                 urlkey = re.sub(r'https?://(www\.)?', '', url.lower()).rstrip('/')
                 if urlkey in seen_urls:
                     continue
