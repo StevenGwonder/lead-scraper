@@ -692,7 +692,8 @@ def _base_result(status, confidence, gaps):
             "words": 0, "phones": [],
             "has_crm": [], "has_analytics": [], "has_marketing_tools": [],
             "has_booking_system": [], "emails": [],
-            "has_outdated_email": False, "has_fax": False, "socials": []}
+            "has_outdated_email": False, "has_fax": False, "socials": [],
+            "observed_at": datetime.now(timezone.utc).isoformat()}
 
 
 def _absolutize(href, base_url, base_domain):
@@ -881,7 +882,8 @@ def check_website(domain):
             "has_marketing_tools": marketing_tools,
             "has_booking_system": booking_tools, "emails": emails[:5],
             "has_outdated_email": has_outdated_email, "has_fax": has_fax,
-            "socials": socials[:6]}
+            "socials": socials[:6],
+            "observed_at": datetime.now(timezone.utc).isoformat()}
 
 
 def search_hiring_signals(biz_name, cache_key, cache):
@@ -1185,8 +1187,33 @@ def qualify_lead(biz, sq):
             and not contactable):
         tier = "Unverified"
 
+    # ── SGW-862: EVIDENCE & CONFIDENCE SUMMARY ─────────────────────────
+    # One documented view of how trustworthy this prospect's data is. Every
+    # signal carries observed_at; UNKNOWN never awards points (already enforced
+    # by the verified gate above); stale site checks are flagged for re-verify.
+    sq_obs = (sq or {}).get("observed_at", "")
+    site_age_days = None
+    if sq_obs:
+        try:
+            site_age_days = (datetime.now(timezone.utc) - datetime.fromisoformat(sq_obs)).days
+        except ValueError:
+            site_age_days = None
+    evidence = {
+        "site_verified": verified,
+        "site_observed_at": sq_obs or None,
+        "site_age_days": site_age_days,
+        "site_stale": bool(site_age_days is not None and site_age_days > 21),
+        "signals": {
+            "hiring": len(hiring_signals),
+            "reviews": len(review_signals),
+            "review_complaints_corroborated": bool(biz.get("review_negative") and corroborated(review_signals)),
+        },
+        "confidence": ("high" if verified else
+                       "low" if status in ("down", "blocked", "unknown") else "medium"),
+    }
+
     return {"score": total, "tier": tier, "breakdown": breakdown,
-            "dimensions": dimensions, "reasons": reasons}
+            "dimensions": dimensions, "evidence": evidence, "reasons": reasons}
 
 
 def _test_qualify_lead():
