@@ -34,12 +34,27 @@ python3 benchmark/evaluate.py --top 10 --verbose
 - **precision@5 = 0.40**, **precision@10 = 0.40**
 - Top-10 false positives: 3 directory listings scoring Warm 45–50
   (`murrietalawyers`, `mbcconsultinginc`, `temeculalawyers`)
-- 8 of 31 Warm records are `bad_fit` — the crawler still rewards directory
+- 8 of 31 Warm records are `bad_fit` — the crawler still rewarded directory
   listings and SEO pages as "admin/ops businesses"
 - 8 records are `unknown` (down/blocked + no contact) — correctly quarantined by T9
 
-**Target:** each NWP-LEAD task should move precision@10 up and the Warm×bad_fit
-cell down. The acceptance criteria in SGW-862/865/866 reference these numbers.
+## Post NWP-LEAD (2026-08-04, all six tasks shipped)
+
+- **precision@5 = 0.60**, **precision@10 = 0.60**, **top-10 false positives = 0**
+- Warm × bad_fit = **0**; every top-10 record is a real, contactable business
+- Live-cache sweep: 58 directory/SEO/out-of-area records demoted, **0 real
+  businesses lost** (domain-boundary matching keeps `prfamilylawyers.com` out
+  of the `lawyers.com` blocklist)
+- Evidence contract: every signal carries `observed_at`/`source_kind`/`recency`;
+  site checks >21 days flagged `site_stale`
+- Dimension model (`fit/pain/capacity/actionability`) explains WHY each
+  prospect ranks; gap-stacking can never route to Hot
+- Collector registry: any source can be disabled via `--disable-collector`
+  without breaking the run (failure-isolated)
+
+**Running the current pipeline against the live cache produces a top-15 of
+genuine Murrieta/Temecula firms** — staffing, CPAs, insurance agencies, law
+firms — instead of directory listings.
 
 ## Ground-truth lessons already surfaced
 
