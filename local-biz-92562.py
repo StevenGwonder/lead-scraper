@@ -289,6 +289,13 @@ def assess_eligibility(url, name="", trade="", phones=None, own_domains=None):
     if any(base_domain.endswith(suf) for suf in GOVERNMENT_TLD_SUFFIXES) or ".gov" in domain:
         return "rejected", "government/public entity"
     # 2. Corporate locator/careers subdomains (agents. / jobs. / careers.).
+    #    Deliberate tradeoff (QC 2026-08-09): this is NOT gated on the base
+    #    domain being a national enterprise — a local SMB hosted on
+    #    jobs.theirlocalbrand.com would be rejected. For this ICP (owner-led
+    #    local SMBs), these subdomain labels are overwhelmingly national
+    #    agent-locator/careers conventions; the false-positive risk is low and
+    #    documented. If a verified local business with such a subdomain
+    #    surfaces, the fix is a per-record exception, not substring weakening.
     if first_label in LOCATOR_SUBDOMAIN_LABELS:
         return "rejected", f"locator/job subdomain ({first_label}.{base_domain})"
     # 3. National enterprise branch — the local office is not the buyer.
@@ -329,7 +336,10 @@ def apply_eligibility_sweep(cache):
             # Route out of the owner-facing stream. Keep raw evidence (signals,
             # site_quality) so nothing useful is lost; the score is zeroed and
             # the tier forced to Cold so these can never enter Warm/priority.
-            if not biz.get("lead_score") or isinstance(biz.get("lead_score"), dict):
+            # QC (2026-08-09): only mutate when lead_score is actually a dict —
+            # a corrupt legacy value (string, int) would crash with
+            # "does not support item assignment" and kill the whole cron run.
+            if not isinstance(biz.get("lead_score"), dict):
                 biz["lead_score"] = {
                     "score": 0, "tier": "Cold", "breakdown": {},
                     "reasons": [f"eligibility: {reason}"]}
@@ -1675,6 +1685,19 @@ def _test_qualify_lead():
         "939 fail: fresh record misjudged"
     assert _signal_checked_recently(_sweep_cache["businesses"]["stale"]) is False, \
         "939 fail: stale record misjudged"
+    # QC (2026-08-09): rejected records are excluded from the coverage
+    # denominator and from the sweep — they never get re-checked, so counting
+    # them would permanently depress coverage and waste sweep budget.
+    _sweep_cache["businesses"]["rejected1"] = {
+        "name": "Rejected Co", "trade": "Accounting",
+        "phones": ["(951) 555-0106"], "own_domains": ["ca.gov"],
+        "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+        "lead_score": {"score": 50, "tier": "Warm"},
+        "eligibility_state": "rejected", "eligibility_reason": "government/public entity"}
+    _cov2 = generate_coverage_report(_sweep_cache, out_path="/tmp/sgw939-cov-test2.json")
+    assert _cov2["eligible"] == 4, f"939/QC fail: rejected in denominator ({_cov2['eligible']})"
+    _cands3 = signal_sweep_candidates(_sweep_cache)
+    assert "rejected1" not in [c[2] for c in _cands3], "939/QC fail: rejected record swept"
 
     # ── SGW-941: eligibility gate ──
     # Government / public agency — rejected
@@ -1720,6 +1743,13 @@ def _test_qualify_lead():
         _elig_cache["businesses"]["gov1"]["lead_score"]["score"] == 0, "941 fail: gov not routed to Cold"
     assert _elig_cache["businesses"]["noct1"]["lead_score"]["tier"] == "Cold", "941 fail: no-contact not routed"
     assert _elig_cache["businesses"]["firm1"]["lead_score"]["tier"] == "Warm", "941 fail: eligible firm lost score"
+    # QC (2026-08-09): corrupt non-dict lead_score must not crash the sweep
+    _elig_cache["businesses"]["corrupt1"] = {
+        "name": "Corrupt Co", "url": "https://corrupt.gov", "own_domains": ["corrupt.gov"],
+        "phones": ["(951) 555-0101"], "lead_score": "corrupted-string-value"}
+    _ec2 = apply_eligibility_sweep(_elig_cache)
+    assert _elig_cache["businesses"]["corrupt1"]["lead_score"]["tier"] == "Cold", \
+        "941/QC fail: corrupt lead_score not replaced"
 
     print("qualify_lead self-check: all assertions passed")
 
@@ -2572,6 +2602,12 @@ def signal_sweep_candidates(cache):
             continue
         if len(biz.get("name", "")) < 3:
             continue
+        # QC (2026-08-09): rejected records (government, directories, national
+        # enterprises) are never owner-facing — re-checking their hiring/review
+        # signals wastes sweep budget. research records stay eligible (the
+        # website-check loop can promote them once contact is found).
+        if biz.get("eligibility_state") == "rejected":
+            continue
         never_h = not biz.get("hiring_checked")
         never_r = not biz.get("review_checked")
         stale_h = _signal_checked_recently(biz) is False and not never_h
@@ -2609,6 +2645,13 @@ def generate_coverage_report(cache, out_path=None):
         if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
             continue
         if len(biz.get("name", "")) < 3:
+            continue
+        # QC (2026-08-09): rejected records are zeroed to Cold and never get
+        # re-checked — counting them in the denominator would permanently
+        # depress coverage (e.g. government entities that will never have
+        # hiring/review evidence). research records stay in the denominator:
+        # they can still be promoted and checked.
+        if biz.get("eligibility_state") == "rejected":
             continue
         eligible += 1
         h = biz.get("hiring_checked") and biz.get("hiring_checked_at") and \
