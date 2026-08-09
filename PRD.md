@@ -1,7 +1,18 @@
 # PRD — Rebalancing Lead Scout for *actual* leads, not crawler artifacts
 
-**Owner:** North Web Pro (AI consultancy — custom software + AI agents on retainer
-that remove manual operational drag; **not a website seller**)
+> **Addendum (2026-08-09, SGW-928 / NWP-LEAD-10):** The "custom AI agents on
+> retainer" framing in §1 and the task history below is **superseded** by the
+> current North Web Pro offer: the product is **diagnosis + removal of
+> operational drag**, delivered as accountable improvement (process change,
+> better use of existing software, integration, automation, custom software, or
+> AI). The implementation tool is chosen **after** the diagnosis, and we do not
+> recommend AI when a simpler durable fix is better. The scoring philosophy in
+> §2–§2b (score drag, named pain, and ability to pay; never score what you
+> couldn't observe) is unchanged — only the offer language is corrected. Task
+> prompts below are historical and left intact.
+
+**Owner:** North Web Pro (diagnosis + removal of operational drag — custom
+software, automation, or AI where that's the right fix; **not a website seller**)
 **Pipeline:** `local-biz-92562.py`
 **Branch:** `claude/cron-script-lead-capture-yeqpn4`
 **Status:** Proposed — tasks below are unstarted.

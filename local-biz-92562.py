@@ -14,6 +14,7 @@ import shutil
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import urllib.parse
@@ -25,6 +26,14 @@ from pathlib import Path
 SEARXNG = "http://localhost:8888/search"
 CACHE_FILE = Path(os.path.expanduser("~/.hermes/scripts/local-biz-cache.json"))
 REPORT_DIR = Path(os.path.expanduser("~/.hermes/scripts/reports"))
+
+# SGW-938 B4: single owner for report delivery. The cron job
+# (92562-local-biz-briefing, no-agent mode) delivers the script's stdout as a
+# text line (the script deliberately does not emit MEDIA: on stdout); the
+# actual HTML file attachment is sent HERE via `hermes send`, which DOES
+# process MEDIA: tags. Keep this one target — the README previously claimed a
+# different chat (-5131689526) which was stale.
+REPORT_TARGET = "telegram:-1003913783231:11"
 
 # ── NOT REAL BUSINESSES ──
 AGGREGATOR_DOMAINS = {
@@ -89,6 +98,34 @@ DIRECTORY_PATH_PATTERNS_WEAK = [
     r'/cities(?:/|$)', r'/white-label(?:/|$)', r'/property-management(?:/|$)',
     r'/contact-us(?:/|$)',
 ]
+
+# ── SGW-941: ELIGIBILITY GATE — entities that can never be owner-facing ──
+# A prospect may only become Warm/priority if it is a distinct operating
+# business in the service area. These rules are the deterministic first-line
+# sanitation; AI review (SGW-940) runs AFTER this gate.
+GOVERNMENT_TLD_SUFFIXES = (".gov", ".edu", ".mil")
+# Corporate locator/careers subdomains — carriers and big firms publish
+# "agents." / "agency." / "jobs." / "careers." microsites; those are NOT the
+# local owner-led business. Boundary-matched on the first label only.
+LOCATOR_SUBDOMAIN_LABELS = ("agents", "agency", "jobs", "careers", "locations", "locator")
+# National enterprises whose local offices are branches, not owner-led SMB
+# retainer buyers. Conservative exact-domain set — add only with evidence.
+NATIONAL_ENTERPRISE_DOMAINS = {
+    "statefarm.com", "allstate.com", "farmers.com", "geico.com",
+    "progressive.com", "libertymutual.com", "usaa.com", "nationwide.com",
+    "travelers.com", "centurycommunities.com", "drdhorton.com", "lennar.com",
+    "kbhome.com", "taylormorrison.com", "pulte.com", "chase.com", "wellsfargo.com",
+    "bankofamerica.com", "homedepot.com", "lowes.com", "costco.com",
+    "walmart.com", "target.com", "starbucks.com", "mcdonalds.com",
+    "subway.com", "dominos.com", "pizzahut.com", "tacobell.com",
+    "marriott.com", "hilton.com", "holidayinn.com", "bestwestern.com",
+    "ups.com", "fedex.com", "usps.com", "att.com", "verizon.com",
+    "tmobile.com", "comcast.com", "spectrum.com", "adt.com",
+    "pestcontrol.com", "orkin.com", "terminix.com", "servpro.com",
+    "acehardware.com", "truevalue.com", "ace.com", "kroger.com",
+    "safeway.com", "ralphs.com", "vons.com", "albertsons.com",
+    "autozone.com", "oreillyauto.com", "advanceautoparts.com", "napaonline.com",
+}
 
 # SGW-864: cleaned names that are SEO titles, not business brands.
 # These are rejected in the crawl loop and downgraded in the cache sweep.
@@ -189,6 +226,17 @@ def _distinctive_name_tokens(name):
             out.append(w)
     return out
 
+def _is_aggregator_domain(domain):
+    """SGW-938 B2: canonical aggregator-domain check — domain-BOUNDARY match.
+
+    `domain == agg or domain.endswith('.' + agg)` — NOT substring. Substring
+    matching makes 'lawyers.com' block 'prfamilylawyers.com' (a real firm).
+    Used by BOTH is_aggregator() and the crawl loop's is_own_site check so
+    ingestion and filtering agree."""
+    d = (domain or "").lower().rstrip(".")
+    return any(d == agg or d.endswith("." + agg) for agg in AGGREGATOR_DOMAINS)
+
+
 def _is_directory_record(url, name=""):
     """SGW-864: True when a record is a directory/SEO listing, not a business.
     Checks domain blocklist, STRONG path signatures (listing pages), and
@@ -196,9 +244,8 @@ def _is_directory_record(url, name=""):
     generic — a real brand on its own /service-area/ page stays a lead."""
     url_l = (url or "").lower()
     domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0]
-    # Domain-boundary match, NOT substring: "lawyers.com" must not match
-    # "prfamilylawyers.com" (a real firm). Exact domain or subdomain-of.
-    if any(domain == agg or domain.endswith("." + agg) for agg in AGGREGATOR_DOMAINS):
+    # SGW-938 B2: one canonical boundary rule for domain blocklists
+    if _is_aggregator_domain(domain):
         return True
     if any(re.search(p, url_l) for p in DIRECTORY_PATH_PATTERNS_STRONG):
         return True
@@ -208,6 +255,100 @@ def _is_directory_record(url, name=""):
     if _is_generic_name(nm):
         return True
     return False
+
+
+# ── SGW-941: ELIGIBILITY GATE ──────────────────────────────────────────
+def _domain_labels(domain):
+    """First-label (subdomain) + registrable-domain split of a host.
+    'agents.statefarm.com' → ('agents', 'statefarm.com');
+    'prfamilylawyers.com' → ('', 'prfamilylawyers.com')."""
+    d = (domain or "").lower().rstrip(".")
+    if not d:
+        return "", ""
+    labels = d.split(".")
+    if len(labels) >= 3:
+        return labels[0], ".".join(labels[1:])
+    return "", d
+
+
+def assess_eligibility(url, name="", trade="", phones=None, own_domains=None):
+    """SGW-941: deterministic first-line eligibility gate.
+
+    Returns ("eligible"|"research"|"rejected", reason). A prospect is
+    REJECTED when it is a government body, national directory/locator page,
+    job subdomain, generic unresolved page-title, or a national-enterprise
+    branch without a distinct local identity. Unknown signals → "research"
+    (never Warm/priority). Local franchises/offices with a resolved local
+    identity + verified contact survive as "eligible" — the parent platform
+    is not the prospect."""
+    url_l = (url or "").lower()
+    domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0] if url_l else ""
+    first_label, base_domain = _domain_labels(domain)
+
+    # 1. Government / public agency / academic — never a prospect.
+    if any(base_domain.endswith(suf) for suf in GOVERNMENT_TLD_SUFFIXES) or ".gov" in domain:
+        return "rejected", "government/public entity"
+    # 2. Corporate locator/careers subdomains (agents. / jobs. / careers.).
+    #    Deliberate tradeoff (QC 2026-08-09): this is NOT gated on the base
+    #    domain being a national enterprise — a local SMB hosted on
+    #    jobs.theirlocalbrand.com would be rejected. For this ICP (owner-led
+    #    local SMBs), these subdomain labels are overwhelmingly national
+    #    agent-locator/careers conventions; the false-positive risk is low and
+    #    documented. If a verified local business with such a subdomain
+    #    surfaces, the fix is a per-record exception, not substring weakening.
+    if first_label in LOCATOR_SUBDOMAIN_LABELS:
+        return "rejected", f"locator/job subdomain ({first_label}.{base_domain})"
+    # 3. National enterprise branch — the local office is not the buyer.
+    if base_domain in NATIONAL_ENTERPRISE_DOMAINS:
+        return "rejected", "national enterprise branch (parent platform is not the prospect)"
+    # 4. Directory/aggregator/SEO listing (existing SGW-864 rules). Generic
+    #    page titles ("Contact Us", "Home") are caught here — rejected, since
+    #    a title with no brand identity is not a business at all.
+    if _is_directory_record(url, name):
+        return "rejected", "directory/SEO listing"
+    # 5. No contact path captured yet → can't be owner-facing.
+    if not phones:
+        return "research", "no verified contact path"
+    # 6. No own domain AND no directory-domain list → nothing to verify against.
+    if not own_domains and not url:
+        return "research", "no domain/identity to verify"
+    return "eligible", "distinct local operating business"
+
+
+def apply_eligibility_sweep(cache):
+    """SGW-941: run the eligibility gate over the cached population.
+
+    Mutates in place (append-compatible): sets eligibility_state + reason on
+    every business, routes 'rejected' records to Cold with a zeroed score
+    (evidence preserved — nothing deleted), and 'research' records to Cold
+    with a reason. 'eligible' records keep their computed score. Returns
+    counts {'eligible','research','rejected'} for the run log."""
+    counts = {"eligible": 0, "research": 0, "rejected": 0}
+    for biz in cache.get("businesses", {}).values():
+        url = biz.get("url", "") or (biz.get("own_domains") or [""])[0]
+        state, reason = assess_eligibility(
+            url, biz.get("name", ""), biz.get("trade", ""),
+            biz.get("phones", []), biz.get("own_domains", []))
+        biz["eligibility_state"] = state
+        biz["eligibility_reason"] = reason
+        counts[state] = counts.get(state, 0) + 1
+        if state in ("rejected", "research"):
+            # Route out of the owner-facing stream. Keep raw evidence (signals,
+            # site_quality) so nothing useful is lost; the score is zeroed and
+            # the tier forced to Cold so these can never enter Warm/priority.
+            # QC (2026-08-09): only mutate when lead_score is actually a dict —
+            # a corrupt legacy value (string, int) would crash with
+            # "does not support item assignment" and kill the whole cron run.
+            if not isinstance(biz.get("lead_score"), dict):
+                biz["lead_score"] = {
+                    "score": 0, "tier": "Cold", "breakdown": {},
+                    "reasons": [f"eligibility: {reason}"]}
+            else:
+                biz["lead_score"]["tier"] = "Cold"
+                biz["lead_score"]["score"] = 0
+                if reason not in biz["lead_score"].setdefault("reasons", []):
+                    biz["lead_score"]["reasons"].append(f"eligibility: {reason}")
+    return counts
 
 # SGW-864 round 2: page-title records ("Contact Us", "About", "Careers") and
 # modifier-generic names ("White-Label Bookkeeping Services", "Temecula CPA, CPA")
@@ -399,6 +540,14 @@ NAME_SUFFIXES = [
     " - Threads", " | Threads", " - Reddit", " | Reddit",
 ]
 
+# ── SGW-939: SIGNAL COVERAGE CONFIG ────────────────────────────────────
+# Strong-signal enrichment (hiring + review) replaces the old "top 8 per run"
+# cap with a bounded sweep that eventually reaches every eligible prospect.
+SIGNAL_RECHECK_DAYS = 14       # freshness window — re-run checks older than this
+SIGNAL_SWEEP_LIMIT = 12        # eligible prospects processed per run
+SIGNAL_COVERAGE_TARGET = 90    # % of eligible prospects to reach (report only)
+SIGNAL_COVERAGE_REPORT = "~/.hermes/scripts/reports/coverage-report.json"
+
 # ── SCORING MODEL ──────────────────────────────────────────────────────
 # Edit the ICP philosophy here — see PRD.md §2.
 # 5-pillar buying-readiness model; max 100. Contactability is a gate, not a scored pillar.
@@ -437,6 +586,41 @@ SCORING = {
     "tiers": {"hot": 65, "warm": 40},
 }
 
+# ── SGW-925: GOOGLE PLACES IDENTITY ENRICHMENT (DORMANT) ────────────────
+# Official Places API only — never scrape Maps pages. Completely inert without
+# a key: places_identity() logs one line and returns None (no network). Full
+# activation = GOOGLE_PLACES_API_KEY set AND --places passed. Provider evidence
+# is stored as neutral corroboration only; scoring/routing effects wait for the
+# benchmark comparison (see docs/source-audit-2026-08.md — no provider locked in).
+PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+PLACES_BASE = "https://maps.googleapis.com/maps/api/place"
+PLACES_MAX_PER_RUN = 40          # per-run request budget guard
+PLACES_EXPIRY_DAYS = 90          # freshness: sweeper treats evidence older than this as stale
+# Strict field selection (official billing terms: you pay per data group asked).
+PLACES_FIELDS = ("formatted_address,name,place_id,website,"
+                 "international_phone_number,business_status")
+# ponytail: optional opt-in env — append the trade to the text query for a
+# broader match when the SearXNG-derived name is mangled. Unset = exact name+zip.
+PLACES_TEXT_SEARCH = os.getenv("PLACES_TEXT_SEARCH", "")
+
+# ── SGW-940: GROUNDED AI REVIEW (OPT-IN, DORMANT BY DEFAULT) ─────────────
+# Second-pass prospect reviewer: one OpenAI-compatible /v1/chat/completions
+# call (stdlib urllib only) that reads the DETERMINISTIC evidence bundle and
+# returns a grounded opinion stored under biz['ai_review']. Host-agnostic —
+# any OpenAI-compatible endpoint (local ollama today, Tahoe later). DISABLED
+# unless a model AND (base_url or api_key) are configured: zero runtime
+# effect, zero network, deterministic pipeline fully functional. AI output is
+# advisory and NEVER affects lead_score or eligibility (routing effects wait
+# for the SGW-861 human-verified benchmark evaluation).
+AI_REVIEW_BASE_URL = os.getenv("AI_REVIEW_BASE_URL", "")     # e.g. https://ollama.com/v1 — empty = disabled
+AI_REVIEW_MODEL = os.getenv("AI_REVIEW_MODEL", "")           # empty = disabled
+AI_REVIEW_API_KEY = os.getenv("AI_REVIEW_API_KEY", "")       # optional — local endpoints may need none
+AI_REVIEW_MAX_CANDIDATES = int(os.getenv("AI_REVIEW_MAX_CANDIDATES", "15"))
+AI_REVIEW_MAX_TOKENS = int(os.getenv("AI_REVIEW_MAX_TOKENS", "1200"))
+AI_REVIEW_TIMEOUT = int(os.getenv("AI_REVIEW_TIMEOUT", "60"))       # seconds per call
+AI_REVIEW_RECHECK_DAYS = int(os.getenv("AI_REVIEW_RECHECK_DAYS", "7"))  # freshness window
+AI_REVIEW_DECISIONS = ("priority", "research", "watch", "reject", "abstain")
+
 # ── SGW-863: COLLECTOR REGISTRY ──────────────────────────────────────────
 # Pluggable, config-gated collectors. Each entry: name, enabled, timeout_s.
 # run_collector() wraps every collector with per-source timeout + failure
@@ -448,6 +632,9 @@ COLLECTORS = {
     "hiring_signals":  {"enabled": True,  "timeout_s": 90,  "desc": "Job-posting signal search"},
     "review_signals":  {"enabled": True,  "timeout_s": 90,  "desc": "Review-complaint signal search"},
     "buying_signals":  {"enabled": True,  "timeout_s": 120, "desc": "Reddit/FB buying-signal crawl"},
+    # SGW-925: dormant without GOOGLE_PLACES_API_KEY — run_collector() logs
+    # "collector disabled" and returns None without touching the network.
+    "places_identity": {"enabled": True,  "timeout_s": 20,  "desc": "Google Places identity enrichment (dormant without key)"},
 }
 
 def collector_enabled(name):
@@ -455,15 +642,36 @@ def collector_enabled(name):
 
 def run_collector(name, fn, *args, **kwargs):
     """Run a collector with its configured timeout; on any failure return
-    None and log — never let one source's error crash the run (SGW-863)."""
+    None and log — never let one source's error crash the run (SGW-863).
+
+    SGW-938 B5: timeout_s is now ENFORCED (was declared metadata only) via a
+    daemon watchdog thread — a hung collector can no longer stall the run
+    forever. The worker thread keeps running in the background if it doesn't
+    notice the timeout, so a wedged DNS socket won't hold the process open."""
     if not collector_enabled(name):
         log(f"collector disabled: {name}")
         return None
-    try:
-        return fn(*args, **kwargs)
-    except Exception as e:  # noqa: BLE001 — isolation is the point
-        log(f"collector failed ({name}): {e}")
+    timeout_s = COLLECTORS.get(name, {}).get("timeout_s", 120)
+    result = {}
+    worker_done = threading.Event()
+
+    def _worker():
+        try:
+            result["value"] = fn(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001 — isolation is the point
+            result["error"] = e
+        finally:
+            worker_done.set()
+
+    t = threading.Thread(target=_worker, name=f"collector-{name}", daemon=True)
+    t.start()
+    if not worker_done.wait(timeout_s):
+        log(f"collector timed out after {timeout_s}s: {name}")
         return None
+    if "error" in result:
+        log(f"collector failed ({name}): {result['error']}")
+        return None
+    return result.get("value")
 
 
 def log(msg):
@@ -493,6 +701,109 @@ def searx_search(query, limit=15, retries=1, delay=5):
             if attempt < retries:
                 time.sleep(delay)
     return []
+
+
+# ── SGW-925: GOOGLE PLACES IDENTITY ENRICHMENT (DORMANT) ────────────────
+def places_identity(biz_name, trade="", zip_hint="92562"):
+    """One-shot Google Places identity lookup via Text Search (official API).
+
+    Returns a dict with provider/source + observed_at + confidence + state +
+    provenance, or None when the key is absent / lookup fails / no match.
+    Missing fields are omitted (caller stores UNKNOWN). Network errors are
+    NOT caught here — production callers MUST go through run_collector(),
+    which isolates and times out every collector (QC 2026-08-09: the
+    docstring used to claim 'never raises'; the run_collector wrapper is the
+    guarantee, and a direct call can raise URLError).
+
+    Official-API terms: results shown to end users must include the "Powered
+    by Google" attribution. This issue stores evidence only — no user-facing
+    display — but the adapter must not be wired into display without it.
+    """
+    if not PLACES_API_KEY:
+        log("collector disabled: places_identity (no API key)")
+        return None
+    # Strict field selection — billing is per requested data group (Essentials
+    # $5/1k, contact fields at the Enterprise tier $35/1k for text search).
+    query = f"{biz_name} {trade} {zip_hint}" if (trade and PLACES_TEXT_SEARCH) else f"{biz_name} {zip_hint}"
+    params = urllib.parse.urlencode({
+        "query": query, "key": PLACES_API_KEY, "fields": PLACES_FIELDS,
+        "inputtype": "textquery",
+    })
+    url = f"{PLACES_BASE}/findplacefromtext/json?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read())
+    if data.get("status") != "OK" or not data.get("candidates"):
+        return None
+    c = data["candidates"][0]
+    if c.get("business_status") == "CLOSED_PERMANENTLY":
+        return None  # closed business is not a prospect — neutral, no evidence
+    ev = {
+        "provider": "google_places",
+        "source": "google_places_api",
+        "provenance": "google_places_api",
+        "state": "confirmed" if c.get("place_id") else "unconfirmed",
+        "confidence": "high" if c.get("place_id") else "medium",
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    for k, api_key in (("name", "name"), ("address", "formatted_address"),
+                       ("website", "website"), ("phone", "international_phone_number")):
+        if c.get(api_key):
+            ev[k] = c[api_key]  # missing → UNKNOWN (field simply absent)
+    if c.get("place_id"):
+        ev["place_id"] = c["place_id"]
+    return ev
+
+
+def run_places_enrichment(cache, limit=PLACES_MAX_PER_RUN):
+    """Enrich eligible/research records with Places identity evidence.
+
+    Bounded by limit and run only when a key exists. Evidence is stored under
+    biz['provider_evidence']['google_places'] — never merged into
+    site_quality/lead_score, never lowers a prospect. 401/403/500/timeout →
+    run_collector returns None → record untouched → run continues (SGW-863)."""
+    if not PLACES_API_KEY:
+        log("collector disabled: places_identity (no API key)")
+        return 0
+    bizs = cache.get("businesses", {})
+    # Eligible first, then research — bounded by the per-run budget.
+    # ponytail: safe sort key — corrupt/non-dict lead_score (SGW-941 QC) must
+    # never crash the enrichment pass, so scores are read defensively.
+    def _score(kv):
+        ls = kv[1].get("lead_score", {})
+        try:
+            return ls.get("score") or 0
+        except AttributeError:
+            return 0
+    ranked = sorted(bizs.items(),
+                    key=lambda kv: (kv[1].get("eligibility_state", "") != "eligible", -_score(kv)))
+    done = 0
+    for norm, biz in ranked:
+        if done >= limit:
+            break
+        if biz.get("eligibility_state") not in ("eligible", "research"):
+            continue
+        if not biz.get("name"):
+            continue
+        # Freshness: keep 90 days, then re-check (SGW-925).
+        old = (biz.get("provider_evidence") or {}).get("google_places", {}).get("observed_at")
+        if old:
+            try:
+                if (datetime.now(timezone.utc) - datetime.fromisoformat(old)).days <= PLACES_EXPIRY_DAYS:
+                    continue
+            except ValueError:
+                pass
+        log(f"  Places identity: {biz.get('name')}")
+        ev = run_collector("places_identity", places_identity,
+                           biz.get("name", ""), biz.get("trade", ""), zip_hint="92562")
+        if ev:
+            biz.setdefault("provider_evidence", {})["google_places"] = ev
+            # Neutral corroboration only — no scoring/routing changes in SGW-925.
+            biz["provider_evidence"]["google_places"]["fresh_until"] = (
+                datetime.now(timezone.utc) + timedelta(days=PLACES_EXPIRY_DAYS)).isoformat()
+        done += 1
+        time.sleep(0.5)  # polite rate limit spread
+    return done
 
 
 def clean_name(title):
@@ -567,7 +878,8 @@ def clean_name(title):
 def is_aggregator(title, url):
     """Check if result is aggregator/list, not a real business."""
     domain = re.sub(r'https?://(www\.)?', '', url.lower()).split('/')[0]
-    if any(agg in domain for agg in AGGREGATOR_DOMAINS):
+    # SGW-938 B2: boundary match via the shared canonical helper, not substring
+    if _is_aggregator_domain(domain):
         return True
     for pattern in AGGREGATOR_TITLE_PATTERNS:
         if re.search(pattern, title, re.I):
@@ -577,30 +889,41 @@ def is_aggregator(title, url):
     return False
 
 
+def _normalize_phone(raw):
+    """SGW-938 B1: canonical NANP phone validator/normalizer.
+
+    Every phone ingestion path (regex extract, tel: href, JSON-LD merge,
+    cache sweep) MUST route through this one function. Returns the
+    normalized '(XXX) XXX-XXXX' form for a valid US number, else None.
+    Rules: 10 digits (or 11 starting with '1'); area code 200-989 and not
+    N11 (411/911); exchange not all-zero (000) and not reserved test (555)."""
+    if not raw:
+        return None
+    digits = re.sub(r"\D", "", str(raw))
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return None
+    ac = int(digits[:3])
+    exchange = int(digits[3:6])
+    if not (200 <= ac <= 989 and ac % 100 != 11) or exchange in (0, 555):
+        return None
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+
+
 def extract_phones(text):
     """Extract US phone numbers. Fix 6: broader regex for more formats.
-    Research 2026-08: NANP validation — area code must be real (200-989, not
-    starting with 0/1), exchange must not be all-zeros or a reserved test prefix
-    (555). Crawler garbage like (100) 091-4084 or (178) 137-3717 must not count
-    as a contact path."""
+    Research 2026-08 / SGW-938 B1: NANP validation via _normalize_phone —
+    area code must be real (200-989, not starting with 0/1), exchange must
+    not be all-zeros or a reserved test prefix (555). Crawler garbage like
+    (100) 091-4084 or (178) 137-3717 must not count as a contact path."""
     # Match: (951) 225-1131, 951-225-1131, 951.225.1131, 951 225 1131, 9512251131
-    phones = re.findall(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
+    phones = re.findall(r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}", text)
     seen, result = set(), []
     for p in phones:
-        digits = re.sub(r'\D', '', p)
-        # Must be 10 digits (US) or 11 starting with 1
-        if len(digits) == 11 and digits.startswith('1'):
-            digits = digits[1:]
-        if digits not in seen and len(digits) == 10:
-            ac = int(digits[:3])
-            exchange = int(digits[3:6])
-            # NANP: area code 200-989 (not 0/1 start, not N11 like 411/911),
-            # exchange not all-zero (000) and not reserved test (555)
-            if not (200 <= ac <= 989 and ac % 100 != 11) or exchange in (0, 555):
-                continue
-            seen.add(digits)
-            # Normalize format: (XXX) XXX-XXXX
-            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+        formatted = _normalize_phone(p)
+        if formatted and formatted not in seen:
+            seen.add(formatted)
             result.append(formatted)
     return result[:3]
 
@@ -897,12 +1220,13 @@ def check_website(domain):
     website_score = sum([has_viewport, has_tel, has_contact, words > 200, has_booking_system or has_chat])
 
     page_phones = extract_phones(combined)
-    for tm in re.findall(r'href=["\']tel:([+\d\s()\-\.]+)', combined, re.I):
-        digits = re.sub(r'\D', '', tm)
-        if len(digits) == 10:
-            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-            if formatted not in page_phones:
-                page_phones.append(formatted)
+    for tm in re.findall(r'href=["\']tel:([+\d\s()\-.]+)', combined, re.I):
+        # SGW-938 B1: tel: hrefs go through the SAME canonical validator —
+        # previously any 10-digit string was accepted, bypassing NANP rules
+        # and letting garbage like (100) 091-4084 count as a contact path.
+        formatted = _normalize_phone(tm)
+        if formatted and formatted not in page_phones:
+            page_phones.append(formatted)
     # T16: JSON-LD telephone is authoritative — normalize and merge
     for t in jl["phones"]:
         for formatted in extract_phones(t):
@@ -931,7 +1255,18 @@ def search_hiring_signals(biz_name, cache_key, cache):
     if not biz_name or len(biz_name) < 3:
         return False
     cached = cache.get("businesses", {}).get(cache_key, {})
-    if cached.get("hiring_checked"):
+    # SGW-939: freshness — a check older than SIGNAL_RECHECK_DAYS is re-run
+    # (job postings rot; a stale "not hiring" from months ago is not current).
+    _checked_at = cached.get("hiring_checked_at")
+    if cached.get("hiring_checked") and _checked_at:
+        try:
+            _age = (datetime.now(timezone.utc) - datetime.fromisoformat(_checked_at)).days
+        except ValueError:
+            _age = 0
+        if _age <= SIGNAL_RECHECK_DAYS:
+            return bool(cached.get("hiring_signals", []))
+    elif cached.get("hiring_checked"):
+        # legacy entry without timestamp — treat as fresh (matches old behavior)
         return bool(cached.get("hiring_signals", []))
 
     biz_name_lower = biz_name.lower()
@@ -986,6 +1321,7 @@ def search_hiring_signals(biz_name, cache_key, cache):
     biz_entry = cache.setdefault("businesses", {}).setdefault(cache_key, {})
     biz_entry["hiring_signals"] = hiring_results[:5]
     biz_entry["hiring_checked"] = True
+    biz_entry["hiring_checked_at"] = datetime.now(timezone.utc).isoformat()  # SGW-939 freshness
     biz_entry["hiring_role_match"] = role_match
     return hiring_found
 
@@ -997,9 +1333,19 @@ def search_review_signals(biz_name, cache_key, cache):
     Respects 6-second rate limiting."""
     if not biz_name or len(biz_name) < 3:
         return False
-    # Check cache first — don't re-search within 3 days
+    # Check cache first — don't re-search within the freshness window
     cached = cache.get("businesses", {}).get(cache_key, {})
-    if cached.get("review_checked"):
+    # SGW-939: freshness — a check older than SIGNAL_RECHECK_DAYS is re-run
+    _checked_at = cached.get("review_checked_at")
+    if cached.get("review_checked") and _checked_at:
+        try:
+            _age = (datetime.now(timezone.utc) - datetime.fromisoformat(_checked_at)).days
+        except ValueError:
+            _age = 0
+        if _age <= SIGNAL_RECHECK_DAYS:
+            return bool(cached.get("review_signals", []))
+    elif cached.get("review_checked"):
+        # legacy entry without timestamp — treat as fresh (matches old behavior)
         return bool(cached.get("review_signals", []))
     
     review_results = []
@@ -1039,6 +1385,7 @@ def search_review_signals(biz_name, cache_key, cache):
     cache["businesses"][cache_key]["review_signals"] = review_results[:5]
     cache["businesses"][cache_key]["review_negative"] = negative_found
     cache["businesses"][cache_key]["review_checked"] = True
+    cache["businesses"][cache_key]["review_checked_at"] = datetime.now(timezone.utc).isoformat()  # SGW-939 freshness
     return negative_found
 
 
@@ -1172,7 +1519,7 @@ def qualify_lead(biz, sq):
 
     # ── SGW-866: DIMENSION MODEL ──────────────────────────────────────
     # Separate WHY a prospect matters instead of one blended number:
-    #   fit         — lane fit for a digital-worker retainer (0-10)
+    #   fit         — lane fit for operational-drag removal (0-10)
     #   pain        — named, corroborated operational pain (0-10)
     #   capacity    — ability/willingness to pay (hiring, size, budget proxy) (0-10)
     #   actionability — can we reach them + evidence confidence (0-10)
@@ -1250,6 +1597,358 @@ def qualify_lead(biz, sq):
 
     return {"score": total, "tier": tier, "breakdown": breakdown,
             "dimensions": dimensions, "evidence": evidence, "reasons": reasons}
+
+
+# ── SGW-940: GROUNDED AI REVIEW (SECOND-PASS PROSPECT REVIEWER) ──────────
+# Advisory only. Reads the deterministic evidence bundle, asks one
+# OpenAI-compatible endpoint (stdlib urllib), stores the grounded opinion
+# under biz['ai_review'] with model/provider/latency/tokens metadata. Never
+# writes anywhere, never touches lead_score/eligibility, disabled by default
+# (AI_REVIEW_MODEL empty → zero network, zero runtime effect).
+
+AI_REVIEW_CONTRACT = (
+    "decision",           # priority | research | watch | reject | abstain
+    "confidence",         # 0.0-1.0
+    "evidence_refs",      # list of evidence keys this review rests on
+    "bottleneck_hypothesis",  # MUST be explicitly labeled as hypothesis
+    "why_now",            # reason this prospect matters this quarter
+    "recommended_first_offer",  # diagnosis-first: process/software outcome,
+                                # implementation tool chosen AFTER diagnosis
+    "email_draft",        # short outreach email, no unsupported claims
+    "phone_opener",       # one-line phone opener
+    "missing_evidence",   # what would raise confidence
+    "abstain_reason",     # required when decision == abstain
+)
+
+
+def _ai_review_evidence_keys(biz):
+    """Stable keys for the deterministic evidence ACTUALLY captured on this
+    record. The anti-fabrication guard only accepts evidence_refs from this
+    set — the model can never cite 'owner', 'revenue', 'employees', etc.
+    because those fields are not captured deterministically. Keys are
+    conditional: a key the record lacks is not a legitimate ref (QC 2026-08-09:
+    the base list used to be unconditional, so 'url'/'phones'/'site_quality'
+    were valid refs even when the record had none of them — that let a
+    fabricated 'priority' on name alone survive the guard)."""
+    keys = ["name", "trade"]
+    if biz.get("url") or biz.get("own_domains"):
+        keys.append("url")
+    if biz.get("own_domains"):
+        keys.append("own_domains")
+    if biz.get("phones"):
+        keys.append("phones")
+        keys.append("phone_contact")
+    if biz.get("snippet"):
+        keys.append("snippet")
+    sq = biz.get("site_quality")
+    if isinstance(sq, dict) and sq:
+        keys.append("site_quality")
+    if isinstance(biz.get("lead_score"), dict) and biz.get("lead_score"):
+        keys.append("lead_score")
+    if biz.get("eligibility_state"):
+        keys.append("eligibility_state")
+    if biz.get("hiring_checked") or biz.get("hiring_signals"):
+        keys.append("hiring")
+        keys.append("hiring_evidence")
+    if biz.get("review_checked") or biz.get("review_signals"):
+        keys.append("reviews")
+        keys.append("review_evidence")
+    if biz.get("provider_evidence"):
+        keys.append("provider_evidence")
+    if isinstance(sq, dict):
+        if sq.get("status") not in (None, "unknown"):
+            keys.append("site_status")
+        if sq.get("automation_gaps"):
+            keys.append("automation_gaps")
+        if sq.get("has_outdated_email") or sq.get("has_fax"):
+            keys.append("paper_signals")
+        if sq.get("platform"):
+            keys.append("platform")
+    return sorted(keys)
+
+
+# Refs that make a 'priority' decision credible: a VERIFIED website read,
+# automation gaps, hiring/review evidence, provider corroboration. Identity
+# and score alone (name/trade/url/phones/lead_score) are never enough, and
+# site_quality is NOT substantive by itself — a record with
+# site_quality={'status':'unknown'} has no verified read, so it cannot
+# ground a priority (QC 2026-08-09: site_quality was in this set, letting a
+# fabricated priority citing ['name','site_quality'] survive on an
+# unknown-status record). site_status is only emitted when the check
+# actually ran (status up/blocked/down), which is the verified-read case.
+AI_REVIEW_SUBSTANTIVE_KEYS = frozenset({
+    "site_status", "automation_gaps", "hiring_evidence",
+    "review_evidence", "provider_evidence", "platform", "paper_signals",
+})
+
+
+def _ai_review_prompt(biz):
+    """Single-shot structured prompt: task, tone, context, evidence bundle,
+    strict JSON output contract, anti-fabrication rules, hypothesis labeling,
+    abstain instruction, and two few-shot examples. SGW-928 alignment: the
+    recommended offer sells the diagnosis (removing operational drag) — the
+    implementation tool is chosen AFTER diagnosis, never AI-first."""
+    sq = biz.get("site_quality") or {}
+    ls = biz.get("lead_score") or {}
+    hs = biz.get("hiring_signals") or []
+    rs = biz.get("review_signals") or []
+    evidence_lines = [
+        f"- name: {biz.get('name', '')}",
+        f"- trade: {biz.get('trade', '')}",
+        f"- url: {biz.get('url', '') or (biz.get('own_domains') or [''])[0]}",
+        f"- phones: {biz.get('phones', [])}",
+        f"- snippet: {biz.get('snippet', '')[:200]}",
+        f"- site_quality: status={sq.get('status')}, confidence={sq.get('confidence')}, "
+        f"website_score={sq.get('website_score')}, automation_gaps={sq.get('automation_gaps')}, "
+        f"platform={sq.get('platform')}, has_crm={sq.get('has_crm')}, "
+        f"has_analytics={sq.get('has_analytics')}, has_booking_system={sq.get('has_booking_system')}, "
+        f"has_outdated_email={sq.get('has_outdated_email')}, has_fax={sq.get('has_fax')}, "
+        f"observed_at={sq.get('observed_at')}",
+        f"- lead_score: score={ls.get('score')}, tier={ls.get('tier')}, "
+        f"reasons={ls.get('reasons', [])}",
+        f"- eligibility_state: {biz.get('eligibility_state')} "
+        f"({biz.get('eligibility_reason', '')})",
+        f"- hiring: checked_at={biz.get('hiring_checked_at')}, "
+        f"role_match={biz.get('hiring_role_match')}, "
+        f"signals={[{'title': s.get('title', '')[:80], 'source_kind': s.get('source_kind')} for s in hs[:5]]}",
+        f"- reviews: checked_at={biz.get('review_checked_at')}, "
+        f"negative={biz.get('review_negative')}, "
+        f"signals={[{'title': s.get('title', '')[:80], 'complaints': s.get('complaints', [])} for s in rs[:5]]}",
+        f"- provider_evidence (neutral corroboration only): "
+        f"{json.dumps(biz.get('provider_evidence', {}))[:400]}",
+        f"- evidence keys you may cite in evidence_refs: {_ai_review_evidence_keys(biz)}",
+    ]
+    prompt = f"""You are a prospect reviewer for a local-business lead pipeline. You review ONLY the evidence below — never invent facts. Your job: flag which prospects deserve a human sales call THIS quarter, and craft a diagnosis-first opening angle.
+
+Task: read the evidence bundle for the business and return a single JSON object matching the output contract exactly.
+
+Tone: concise, practical, direct. No fluff.
+
+EVIDENCE BUNDLE (this is ALL you know about the business):
+{chr(10).join(evidence_lines)}
+
+OUTPUT CONTRACT (strict JSON object, no markdown, no commentary outside the JSON):
+{{
+  "decision": "priority" | "research" | "watch" | "reject" | "abstain",
+  "confidence": 0.0-1.0,
+  "evidence_refs": ["subset of the evidence keys listed above"],
+  "bottleneck_hypothesis": "LABELED HYPOTHESIS: <one sentence, explicitly starting with 'hypothesis:'>",
+  "why_now": "why this prospect matters this quarter",
+  "recommended_first_offer": "diagnosis-first offer — name the operational drag to remove; the implementation tool (process change, existing software, automation, AI) is chosen AFTER diagnosis and only if the evidence supports it",
+  "email_draft": "2-4 sentence email",
+  "phone_opener": "one line",
+  "missing_evidence": ["what would raise confidence"],
+  "abstain_reason": "required when decision is abstain"
+}}
+
+ANTI-FABRICATION RULES (hard constraints):
+1. You may NOT claim facts not present in the evidence bundle: no owner names, no revenue, no employee counts, no specific complaints beyond the review signals listed, no hiring beyond the hiring signals listed, no software/location/pain the evidence does not mention.
+2. Every factual claim must map to an evidence key you cite in evidence_refs, and evidence_refs must be a subset of the evidence keys listed in the bundle.
+3. Any reasoning about the business's internal bottleneck is a HYPOTHESIS and must be labeled with the literal prefix "hypothesis:" inside bottleneck_hypothesis.
+4. If the evidence is too thin to support a decision, output "decision": "abstain" with an abstain_reason. Abstaining is always correct when evidence is weak.
+5. decision "priority" requires strong supporting evidence (verified site read or corroborated external signals) — never priority on name/trade alone.
+6. recommended_first_offer, email_draft, phone_opener must contain NO unsupported claims. Sell the diagnosis (e.g. "never miss another intake call"), not a tool, unless the evidence names the gap.
+
+EXAMPLES:
+
+Example 1 (weak evidence → abstain):
+Evidence: name="Unknown Co", trade="Plumbing", no site check, no phones, no signals.
+Expected:
+{{"decision": "abstain", "confidence": 0.1, "evidence_refs": ["name", "trade"], "bottleneck_hypothesis": "hypothesis: none — insufficient evidence", "why_now": "", "recommended_first_offer": "", "email_draft": "", "phone_opener": "", "missing_evidence": ["site_quality", "phones", "hiring", "reviews"], "abstain_reason": "no verified website, no contact path, no external signals"}}
+
+Example 2 (strong evidence → priority):
+Evidence: name="Real Firm LLC", trade="Accounting", site up/high confidence, automation_gaps=["no booking system"], phones=["(951) 225-1131"], hiring_role_match=true on own site, two corroborated review complaints.
+Expected:
+{{"decision": "priority", "confidence": 0.85, "evidence_refs": ["name", "trade", "phones", "site_quality", "automation_gaps", "hiring_evidence", "review_evidence"], "bottleneck_hypothesis": "hypothesis: intake/scheduling overload — no booking system plus hiring for an automatable role plus slow-response complaints", "why_now": "admin-heavy intake with a hiring load and corroborated slow-response complaints — removing the drag pays for itself this quarter", "recommended_first_offer": "an intake audit that stops missed calls and automates appointment scheduling", "email_draft": "Subject: missed calls and scheduling", "phone_opener": "I'll show you where your intake is leaking calls.", "missing_evidence": [], "abstain_reason": ""}}
+
+Return ONLY the JSON object."""
+    return prompt
+
+
+def _parse_ai_review(raw):
+    """Lenient JSON extraction + schema validation for the model reply.
+    First {...} block wins; every failure path lands on abstain so a bad
+    model response can NEVER crash the run or manufacture a decision.
+    Never raises."""
+    if not raw or not isinstance(raw, str):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    try:
+        data = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    if not isinstance(data, dict):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    # Decision whitelist; anything else → abstain.
+    decision = data.get("decision", "abstain")
+    if not isinstance(decision, str) or decision not in AI_REVIEW_DECISIONS:
+        decision = "abstain"
+    parsed = {
+        "decision": decision,
+        "confidence": data.get("confidence", 0.0),
+        "evidence_refs": data.get("evidence_refs", []) or [],
+        "bottleneck_hypothesis": data.get("bottleneck_hypothesis", "") or "",
+        "why_now": data.get("why_now", "") or "",
+        "recommended_first_offer": data.get("recommended_first_offer", "") or "",
+        "email_draft": data.get("email_draft", "") or "",
+        "phone_opener": data.get("phone_opener", "") or "",
+        "missing_evidence": data.get("missing_evidence", []) or [],
+        "abstain_reason": data.get("abstain_reason", "") or "",
+    }
+    if not isinstance(parsed["confidence"], (int, float)) or not isinstance(parsed["evidence_refs"], list):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    # QC 2026-08-09: NaN confidence passes the isinstance check (it IS a
+    # float) and would render 'nan%' in the weekly brief. Normalize to 0.0 —
+    # NaN != NaN is the zero-import test.
+    if isinstance(parsed["confidence"], float) and parsed["confidence"] != parsed["confidence"]:
+        parsed["confidence"] = 0.0
+    return parsed
+
+
+def _apply_ai_fabrication_guard(parsed, biz):
+    """Cheap, deterministic anti-embellishment: evidence_refs must be a
+    subset of the evidence actually captured on this record. Unbacked claims
+    are stripped, and a 'priority' that rests on zero valid refs is
+    downgraded to abstain (a strong decision with no grounding is exactly
+    the fabrication this guard exists to kill). Everything else passes
+    through — the AI's prose is advisory and reviewed by a human later."""
+    if parsed["decision"] == "abstain":
+        return parsed
+    valid = set(_ai_review_evidence_keys(biz))
+    refs = parsed.get("evidence_refs") or []
+    refs = [r for r in refs if isinstance(r, str) and r in valid]
+    # Strip unbacked claims in the prose fields.
+    for field in ("bottleneck_hypothesis", "why_now", "recommended_first_offer",
+                  "email_draft", "phone_opener"):
+        if isinstance(parsed.get(field), str):
+            parsed[field] = parsed[field][:500]
+    # A 'priority' verdict must rest on substantive evidence — a verified
+    # website read, automation gaps, hiring/review evidence, provider
+    # corroboration. Identity/score refs alone (name, trade, url, phones,
+    # lead_score) can never ground a priority call; without substantive
+    # backing it is downgraded to abstain (QC 2026-08-09: the old guard only
+    # checked for ANY surviving ref, so a fabricated 'priority' citing name
+    # + owner + revenue survived once the unbacked refs were stripped).
+    if parsed["decision"] == "priority":
+        if not refs or not (set(refs) & AI_REVIEW_SUBSTANTIVE_KEYS):
+            return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                    "bottleneck_hypothesis": "", "why_now": "",
+                    "recommended_first_offer": "", "email_draft": "",
+                    "phone_opener": "", "missing_evidence": [],
+                    "abstain_reason": "priority without substantive evidence — stripped by fabrication guard"}
+    parsed["evidence_refs"] = refs
+    return parsed
+
+
+def ai_review_candidate(biz):
+    """One grounded AI review for a single candidate. Returns the parsed
+    review + metadata (model, provider, reviewed_at, latency_ms,
+    tokens_used estimate). Any network/HTTP/timeout failure → abstain with
+    the error recorded — never raises, never crashes the run."""
+    if not AI_REVIEW_MODEL or not AI_REVIEW_BASE_URL:
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "AI review not configured"}
+    start = time.monotonic()
+    raw_body = ""  # captured for the token estimate; empty on early failure
+    payload = json.dumps({
+        "model": AI_REVIEW_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are a rigorous, evidence-grounded prospect reviewer. Never invent facts."},
+            {"role": "user", "content": _ai_review_prompt(biz)},
+        ],
+        "temperature": 0,           # determinism: same evidence → same review
+        "max_tokens": AI_REVIEW_MAX_TOKENS,
+    }).encode("utf-8")
+    base = AI_REVIEW_BASE_URL.rstrip("/")
+    url = f"{base}/chat/completions"
+    headers = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+    if AI_REVIEW_API_KEY:
+        headers["Authorization"] = f"Bearer {AI_REVIEW_API_KEY}"
+    try:
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=AI_REVIEW_TIMEOUT) as resp:
+            raw_body = resp.read().decode("utf-8", errors="replace")
+        body = json.loads(raw_body)
+        raw = (body.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+        parsed = _parse_ai_review(raw)
+        parsed = _apply_ai_fabrication_guard(parsed, biz)
+    except Exception as e:  # noqa: BLE001 — a bad model/network must never kill the run
+        parsed = {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                  "bottleneck_hypothesis": "", "why_now": "",
+                  "recommended_first_offer": "", "email_draft": "",
+                  "phone_opener": "", "missing_evidence": [],
+                  "abstain_reason": f"AI review unavailable: {e}"}
+    latency_ms = int((time.monotonic() - start) * 1000)
+    parsed["model"] = AI_REVIEW_MODEL
+    parsed["provider"] = base
+    parsed["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+    parsed["latency_ms"] = latency_ms
+    parsed["tokens_used"] = max(1, len(raw_body) // 4)  # ponytail char/4 estimate
+    return parsed
+
+
+def run_ai_review(cache):
+    """Second-pass AI oversight over the bounded candidate set: eligible and
+    research records only (post eligibility gate, post evidence enrichment),
+    top AI_REVIEW_MAX_CANDIDATES by deterministic score, skipping records
+    reviewed within AI_REVIEW_RECHECK_DAYS. Stores under biz['ai_review']
+    and returns decision counts. NEVER touches lead_score or eligibility —
+    purely advisory. Returns 0 reviewed when the reviewer is unconfigured
+    (and never touches the network)."""
+    if not AI_REVIEW_MODEL or not AI_REVIEW_BASE_URL:
+        log("AI review skipped (not configured)")
+        return {"reviewed": 0, "decisions": {}}
+    bizs = cache.get("businesses", {})
+    candidates = [
+        (norm, biz) for norm, biz in bizs.items()
+        if biz.get("eligibility_state") in ("eligible", "research") and biz.get("name")
+    ]
+    # Deterministic order: eligible first, then deterministic score desc.
+    candidates.sort(key=lambda nb: (nb[1].get("eligibility_state", "") != "eligible",
+                                    -(nb[1].get("lead_score") or {}).get("score", 0)))
+    reviewed = 0
+    decisions = {}
+    for norm, biz in candidates[:AI_REVIEW_MAX_CANDIDATES]:
+        old = (biz.get("ai_review") or {}).get("reviewed_at", "")
+        if old:
+            try:
+                age = (datetime.now(timezone.utc) - datetime.fromisoformat(old)).days
+            except ValueError:
+                age = AI_REVIEW_RECHECK_DAYS + 1
+            if age <= AI_REVIEW_RECHECK_DAYS:
+                continue  # fresh review — keep cost discipline
+        log(f"  AI review: {biz.get('name')}")
+        review = ai_review_candidate(biz)
+        biz["ai_review"] = review
+        reviewed += 1
+        decisions[review["decision"]] = decisions.get(review["decision"], 0) + 1
+        time.sleep(0.5)  # polite rate-limit spread, like the other passes
+    return {"reviewed": reviewed, "decisions": decisions}
 
 
 def _test_qualify_lead():
@@ -1382,6 +2081,577 @@ def _test_qualify_lead():
     assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
     p2 = pitch_for({"trade": "Law Office"})
     assert "billable" in p2, f"research fail: admin pitch not outcome-first ({p2})"
+    # SGW-928: pitch sells the OUTCOME, never the tool (diagnosis-first; the
+    # implementation — process, software, or AI — is chosen after the audit).
+    # A business with no AI-specific evidence must get a tool-agnostic pitch.
+    for no_ai_biz, expect in (
+        ({"trade": "Accounting", "site_quality": {"automation_gaps": ["no booking system"]}}, "intake"),
+        ({"trade": "Plumbing", "site_quality": {"automation_gaps": ["no booking system"]}}, "missed revenue"),
+        ({"trade": "Plumbing"}, "missed"),
+    ):
+        pb = pitch_for(no_ai_biz)
+        assert expect in pb, f"SGW-928 fail: pitch lost outcome ({pb})"
+        for banned in ("digital worker", "AI agent", "autopilot", "hold music"):
+            assert banned not in pb, f"SGW-928 fail: pitch leads with tool ({pb})"
+
+    # ── SGW-938 B1: canonical phone validator — every ingestion path agrees ──
+    # tel: href path must reject what extract_phones rejects
+    assert _normalize_phone("tel:(100) 091-4084") is None, "B1 fail: tel: bad area code accepted"
+    assert _normalize_phone("tel:(007) 780-0750") is None, "B1 fail: tel: 007 area code accepted"
+    assert _normalize_phone("tel:(178) 137-3717") is None, "B1 fail: tel: 178 area code accepted"
+    assert _normalize_phone("tel:(951) 555-1234") is None, "B1 fail: tel: 555 exchange accepted"
+    assert _normalize_phone("tel:(951) 225-1131") == "(951) 225-1131", "B1 fail: tel: valid number rejected"
+    assert _normalize_phone("(951) 225-1131") == "(951) 225-1131", "B1 fail: valid formatted number rejected"
+    assert _normalize_phone("+1 (951) 225-1131") == "(951) 225-1131", "B1 fail: +1 country code rejected"
+    assert _normalize_phone("9512251131") == "(951) 225-1131", "B1 fail: bare digits rejected"
+    assert _normalize_phone("(951) 225-113") is None, "B1 fail: 9-digit number accepted"
+    assert _normalize_phone("411") is None, "B1 fail: short garbage accepted"
+    # cache sweep: contaminated records must be purged on load
+    test_cache = {"businesses": {
+        "b1": {"phones": ["(951) 225-1131", "(100) 091-4084"], "own_domains": ["x.com"],
+               "name": "Real Co", "last_seen": "2099-01-01T00:00:00+00:00"},
+    }, "signals": [], "fb_groups": []}
+    import tempfile
+    import pathlib as _pl
+    with tempfile.TemporaryDirectory() as _td:
+        _orig_cache = CACHE_FILE
+        _tmp_cache = _pl.Path(_td) / "cache.json"
+        import copy
+        _c = copy.deepcopy(test_cache)
+        _tmp_cache.write_text(json.dumps(_c), encoding="utf-8")
+        try:
+            globals()["CACHE_FILE"] = _tmp_cache
+            _loaded = load_cache()
+            assert _loaded["businesses"]["b1"]["phones"] == ["(951) 225-1131"], \
+                f"B1 fail: cache sweep kept contaminated phone {_loaded['businesses']['b1']['phones']}"
+        finally:
+            globals()["CACHE_FILE"] = _orig_cache
+
+    # ── SGW-938 B2: domain-boundary aggregator matching ──
+    assert _is_aggregator_domain("lawyers.com") is True, "B2 fail: exact aggregator domain not blocked"
+    assert _is_aggregator_domain("www.lawyers.com") is True, "B2 fail: subdomain not blocked"
+    assert _is_aggregator_domain("prfamilylawyers.com") is False, "B2 fail: containing-domain real firm dropped"
+    assert _is_aggregator_domain("myattorneys.agency.yelp.com") is True, "B2 fail: deep subdomain not blocked"
+    assert is_aggregator("PrFamily Lawyers", "https://prfamilylawyers.com") is False, \
+        "B2 fail: is_aggregator still drops containing-domain real firm"
+    assert is_aggregator("Some Listing", "https://www.yelp.com/biz/x") is True, \
+        "B2 fail: yelp not blocked in is_aggregator"
+    assert is_aggregator("Some Listing", "https://www.yelpcdn.com/x") is True, \
+        "B2 fail: yelpcdn (explicitly blocklisted) not blocked by boundary rule"
+
+    # ── SGW-939: signal coverage sweep + report ──
+    _now = datetime.now(timezone.utc).isoformat()
+    _old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    _sweep_cache = {"businesses": {
+        "fresh": {"name": "Fresh Co", "trade": "Accounting",
+                  "phones": ["(951) 555-0101"], "own_domains": ["fresh.com"],
+                  "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                  "hiring_checked": True, "hiring_checked_at": _now,
+                  "review_checked": True, "review_checked_at": _now,
+                  "lead_score": {"score": 50, "tier": "Warm"}},
+        "never": {"name": "Never Co", "trade": "Accounting",
+                  "phones": ["(951) 555-0102"], "own_domains": ["never.com"],
+                  "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                  "lead_score": {"score": 60, "tier": "Warm"}},
+        "stale": {"name": "Stale Co", "trade": "Accounting",
+                  "phones": ["(951) 555-0103"], "own_domains": ["stale.com"],
+                  "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                  "hiring_checked": True, "hiring_checked_at": _old,
+                  "review_checked": True, "review_checked_at": _old,
+                  "lead_score": {"score": 40, "tier": "Cold"}},
+        "nosq": {"name": "No SQ Co", "trade": "Accounting",
+                 "phones": ["(951) 555-0104"], "own_domains": ["nosq.com"],
+                 "lead_score": {"score": 99, "tier": "Warm"}},
+    }, "signals": [], "fb_groups": []}
+    _cands = signal_sweep_candidates(_sweep_cache)
+    _names = [c[2] for c in _cands]
+    assert _names == ["never", "stale"], f"939 fail: sweep priority wrong ({_names})"
+    assert "nosq" not in _names, "939 fail: no-site_quality record must not be eligible"
+    assert "fresh" not in _names, "939 fail: fresh-on-both record must not be eligible"
+    # partial (one checked, one not) → priority 1 (after never-never, before stale)
+    _sweep_cache["businesses"]["partial"] = {
+        "name": "Partial Co", "trade": "Accounting",
+        "phones": ["(951) 555-0105"], "own_domains": ["partial.com"],
+        "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+        "hiring_checked": True, "hiring_checked_at": _now,
+        "lead_score": {"score": 55, "tier": "Warm"}}
+    _cands2 = signal_sweep_candidates(_sweep_cache)
+    _prios = [(c[2], c[0]) for c in _cands2]
+    assert _prios == [("never", 0), ("partial", 1), ("stale", 2)], f"939 fail: sweep tiers ({_prios})"
+    # coverage math
+    _cov = generate_coverage_report(_sweep_cache, out_path="/tmp/sgw939-cov-test.json")
+    assert _cov["eligible"] == 4, f"939 fail: eligible count {_cov['eligible']}"
+    assert _cov["fresh_both"] == 1, f"939 fail: fresh_both {_cov['fresh_both']}"
+    assert _cov["fresh_both_percent"] == 25, f"939 fail: pct {_cov['fresh_both_percent']}"
+    assert _cov["never_checked"] == 2, f"939 fail: never_checked {_cov['never_checked']}"  # never + partial
+    assert _cov["warm_eligible"] == 3 and _cov["warm_fresh"] == 1, \
+        f"939 fail: warm coverage {_cov['warm_eligible']}/{_cov['warm_fresh']}"
+    assert _signal_checked_recently(_sweep_cache["businesses"]["fresh"]) is True, \
+        "939 fail: fresh record misjudged"
+    assert _signal_checked_recently(_sweep_cache["businesses"]["stale"]) is False, \
+        "939 fail: stale record misjudged"
+    # QC (2026-08-09): rejected records are excluded from the coverage
+    # denominator and from the sweep — they never get re-checked, so counting
+    # them would permanently depress coverage and waste sweep budget.
+    _sweep_cache["businesses"]["rejected1"] = {
+        "name": "Rejected Co", "trade": "Accounting",
+        "phones": ["(951) 555-0106"], "own_domains": ["ca.gov"],
+        "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+        "lead_score": {"score": 50, "tier": "Warm"},
+        "eligibility_state": "rejected", "eligibility_reason": "government/public entity"}
+    _cov2 = generate_coverage_report(_sweep_cache, out_path="/tmp/sgw939-cov-test2.json")
+    assert _cov2["eligible"] == 4, f"939/QC fail: rejected in denominator ({_cov2['eligible']})"
+    _cands3 = signal_sweep_candidates(_sweep_cache)
+    assert "rejected1" not in [c[2] for c in _cands3], "939/QC fail: rejected record swept"
+
+    # ── SGW-941: eligibility gate ──
+    # Government / public agency — rejected
+    assert assess_eligibility("https://ca.gov/board/accountancy", "CA Board", "Accounting",
+                              ["(951) 555-0101"], ["ca.gov"])[0] == "rejected", "941 fail: gov not rejected"
+    assert assess_eligibility("https://school.edu/", "Some College", "Education",
+                              ["(951) 555-0101"], ["school.edu"])[0] == "rejected", "941 fail: edu not rejected"
+    # Corporate locator/careers subdomains — rejected
+    assert assess_eligibility("https://agents.statefarm.com/ca/murrieta", "State Farm Agent", "Insurance",
+                              ["(951) 555-0101"], ["agents.statefarm.com"])[0] == "rejected", "941 fail: agents. subdomain not rejected"
+    assert assess_eligibility("https://jobs.allstate.com/", "Allstate Careers", "Insurance",
+                              ["(951) 555-0101"], ["jobs.allstate.com"])[0] == "rejected", "941 fail: jobs. subdomain not rejected"
+    # National enterprise branch — rejected
+    assert assess_eligibility("https://www.allstate.com/murrieta-office", "Allstate Murrieta", "Insurance",
+                              ["(951) 555-0101"], ["allstate.com"])[0] == "rejected", "941 fail: national enterprise not rejected"
+    # Directory / SEO listing — rejected (SGW-864 rules preserved)
+    assert assess_eligibility("https://lawyerland.com/lawyers/murrieta", "Lawyerland", "Law",
+                              ["(951) 555-0101"], ["lawyerland.com"])[0] == "rejected", "941 fail: directory not rejected"
+    # Generic page title without own domain — rejected (a title is not a business)
+    assert assess_eligibility("https://example.com/contact", "Contact Us", "Law",
+                              [], [])[0] == "rejected", "941 fail: generic page title not rejected"
+    # No contact path — research
+    assert assess_eligibility("https://realfirm.com", "Real Firm LLC", "Accounting",
+                              [], ["realfirm.com"])[0] == "research", "941 fail: no-contact not research"
+    # Distinct local business — eligible
+    assert assess_eligibility("https://singletonsmith.com", "Singleton Smith Law Offices", "Law Office",
+                              ["(951) 555-0101"], ["singletonsmith.com"])[0] == "eligible", "941 fail: real firm not eligible"
+    # Local franchise/office with own identity + contact — eligible (parent is not the prospect)
+    assert assess_eligibility("https://murrietainsurance.com", "Murrieta Insurance Agency", "Insurance",
+                              ["(951) 555-0101"], ["murrietainsurance.com"])[0] == "eligible", "941 fail: local agency not eligible"
+    # apply_eligibility_sweep routing: rejected/research → Cold zeroed, eligible keeps score
+    _elig_cache = {"businesses": {
+        "gov1": {"name": "CA Board", "url": "https://ca.gov/board", "own_domains": ["ca.gov"],
+                 "phones": ["(951) 555-0101"], "lead_score": {"score": 54, "tier": "Warm"}},
+        "firm1": {"name": "Real Firm LLC", "url": "https://realfirm.com", "own_domains": ["realfirm.com"],
+                  "phones": ["(951) 555-0101"], "lead_score": {"score": 50, "tier": "Warm"}},
+        "noct1": {"name": "No Contact LLC", "url": "https://noct.com", "own_domains": ["noct.com"],
+                  "phones": [], "lead_score": {"score": 45, "tier": "Warm"}},
+    }}
+    _ec = apply_eligibility_sweep(_elig_cache)
+    assert _ec == {"eligible": 1, "research": 1, "rejected": 1}, f"941 fail: sweep counts {_ec}"
+    assert _elig_cache["businesses"]["gov1"]["lead_score"]["tier"] == "Cold" and \
+        _elig_cache["businesses"]["gov1"]["lead_score"]["score"] == 0, "941 fail: gov not routed to Cold"
+    assert _elig_cache["businesses"]["noct1"]["lead_score"]["tier"] == "Cold", "941 fail: no-contact not routed"
+    assert _elig_cache["businesses"]["firm1"]["lead_score"]["tier"] == "Warm", "941 fail: eligible firm lost score"
+    # QC (2026-08-09): corrupt non-dict lead_score must not crash the sweep
+    _elig_cache["businesses"]["corrupt1"] = {
+        "name": "Corrupt Co", "url": "https://corrupt.gov", "own_domains": ["corrupt.gov"],
+        "phones": ["(951) 555-0101"], "lead_score": "corrupted-string-value"}
+    _ec2 = apply_eligibility_sweep(_elig_cache)
+    assert _elig_cache["businesses"]["corrupt1"]["lead_score"]["tier"] == "Cold", \
+        "941/QC fail: corrupt lead_score not replaced"
+
+    # ── SGW-925: Google Places identity enrichment — dormant adapter ──
+    import unittest.mock as _mock
+    _saved_key = globals()["PLACES_API_KEY"]
+    try:
+        # 1) No key → fully inert: no network, no evidence, record untouched.
+        globals()["PLACES_API_KEY"] = ""
+        _inert = {"name": "Inert Co", "trade": "Plumbing",
+                  "site_quality": {"status": "up", "website_score": 2},
+                  "lead_score": {"score": 55, "tier": "Warm"},
+                  "eligibility_state": "eligible"}
+        assert places_identity("Inert Co") is None, "925 fail: no-key places_identity must return None"
+        _before = json.dumps(_inert, sort_keys=True)
+        with _mock.patch.object(urllib.request, "urlopen") as _u:
+            _n = run_places_enrichment({"businesses": {"inert": _inert}})
+        _u.assert_not_called()  # 925 fail: no-key run must not touch the network
+        assert _n == 0, "925 fail: no-key run must check 0 records"
+        assert _inert.get("provider_evidence") is None, "925 fail: no-key run stored evidence"
+        assert json.dumps(_inert, sort_keys=True) == _before, "925 fail: no-key run mutated record"
+        # 2) Key + valid response → evidence stored with the contract fields,
+        #    and deterministic site_quality/lead_score are never overwritten.
+        globals()["PLACES_API_KEY"] = "fake-key-925"
+        _hit = {"name": "Real Firm LLC", "trade": "Accounting",
+                "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                "lead_score": {"score": 60, "tier": "Warm"},
+                "eligibility_state": "eligible"}
+        _sq_before = json.dumps(_hit["site_quality"], sort_keys=True)
+        _ls_before = json.dumps(_hit["lead_score"], sort_keys=True)
+        _ok_payload = json.dumps({
+            "status": "OK",
+            "candidates": [{
+                "name": "Real Firm LLC", "formatted_address": "123 Main St, Murrieta, CA 92562",
+                "place_id": "ChIJfake925", "website": "https://realfirm.com",
+                "international_phone_number": "(951) 225-1131",
+                "business_status": "OPERATIONAL",
+            }]}).encode()
+
+        class _FakeResp:
+            def __init__(self, payload):
+                self._payload = payload
+            def read(self):
+                return self._payload
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        with _mock.patch.object(urllib.request, "urlopen", return_value=_FakeResp(_ok_payload)):
+            _n = run_places_enrichment({"businesses": {"hit": _hit}})
+        assert _n == 1, f"925 fail: keyed run checked {_n} records"
+        _ev = _hit["provider_evidence"]["google_places"]
+        for _req in ("provider", "place_id", "observed_at", "confidence", "state", "provenance", "fresh_until"):
+            assert _ev.get(_req), f"925 fail: evidence missing {_req}"
+        assert _ev["provider"] == "google_places" and _ev["provenance"] == "google_places_api"
+        assert _ev["place_id"] == "ChIJfake925" and _ev["phone"] == "(951) 225-1131"
+        # Neutral corroboration only — score/quality never touched by provider data.
+        assert json.dumps(_hit["site_quality"], sort_keys=True) == _sq_before, "925 fail: site_quality overwritten"
+        assert json.dumps(_hit["lead_score"], sort_keys=True) == _ls_before, "925 fail: lead_score overwritten"
+        # Missing fields stay UNKNOWN (absent), never fabricated pain.
+        _sparse_payload = json.dumps({
+            "status": "OK",
+            "candidates": [{"name": "Sparse Co", "business_status": "OPERATIONAL"}]}).encode()
+        _sparse = {"name": "Sparse Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen", return_value=_FakeResp(_sparse_payload)):
+            run_places_enrichment({"businesses": {"sparse": _sparse}})
+        _sev = _sparse["provider_evidence"]["google_places"]
+        assert "phone" not in _sev and "website" not in _sev and "address" not in _sev, \
+            "925 fail: absent fields must stay UNKNOWN (not fabricated)"
+        assert _sev.get("confidence") == "medium", "925 fail: unconfirmed match confidence"
+        # 3) Failure-safe: HTTP error and empty result → None, nothing stored, no crash.
+        _fail = {"name": "Fail Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen",
+                                side_effect=urllib.error.URLError("boom")):
+            _r = run_collector("places_identity", places_identity, "Fail Co", "Plumbing")
+        assert _r is None, "925 fail: provider failure must return None"
+        assert _fail.get("provider_evidence") is None, "925 fail: failure stored evidence"
+        _empty = {"name": "Empty Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen", return_value=_FakeResp(
+                json.dumps({"status": "ZERO_RESULTS", "candidates": []}).encode())):
+            run_places_enrichment({"businesses": {"empty": _empty}})
+        assert _empty.get("provider_evidence") is None, "925 fail: ZERO_RESULTS stored evidence"
+    finally:
+        globals()["PLACES_API_KEY"] = _saved_key
+
+    # ── SGW-940: grounded AI review — opt-in, advisory, fabrication-guarded ──
+    _saved_ai = (globals()["AI_REVIEW_MODEL"], globals()["AI_REVIEW_BASE_URL"],
+                 globals()["AI_REVIEW_API_KEY"])
+    try:
+        # 1) Unconfigured (no model, no base_url) → zero reviewed, records
+        #    untouched, NO network (urlopen must never be called).
+        globals()["AI_REVIEW_MODEL"] = ""
+        globals()["AI_REVIEW_BASE_URL"] = ""
+        globals()["AI_REVIEW_API_KEY"] = ""
+        _inert_ai = {"name": "Inert Co", "trade": "Plumbing",
+                     "eligibility_state": "eligible",
+                     "lead_score": {"score": 55, "tier": "Warm"}}
+        _before_ai = json.dumps(_inert_ai, sort_keys=True)
+        with _mock.patch.object(urllib.request, "urlopen") as _u:
+            _r = run_ai_review({"businesses": {"inert": _inert_ai}})
+        _u.assert_not_called()  # 940 fail: unconfigured review must not touch the network
+        assert _r["reviewed"] == 0, f"940 fail: unconfigured review checked {_r['reviewed']}"
+        assert _r["decisions"] == {}, f"940 fail: unconfigured review decisions {_r['decisions']}"
+        assert json.dumps(_inert_ai, sort_keys=True) == _before_ai, "940 fail: unconfigured review mutated record"
+        assert _inert_ai.get("ai_review") is None, "940 fail: unconfigured review stored ai_review"
+        # 2) Parse layer: garbage / empty / non-JSON model output → abstain, never crash.
+        assert _parse_ai_review(None)["decision"] == "abstain"
+        assert _parse_ai_review("")["decision"] == "abstain"
+        assert _parse_ai_review("Sure! Here's my thinking...")["decision"] == "abstain"
+        assert _parse_ai_review("```json\n{not valid json\n```")["decision"] == "abstain"
+        assert _parse_ai_review("42")["decision"] == "abstain"
+        # Decision whitelist: unknown decision → abstain, valid ones pass.
+        assert _parse_ai_review(json.dumps({"decision": "urgent"}))["decision"] == "abstain"
+        for _d in ("priority", "research", "watch", "reject", "abstain"):
+            _p = _parse_ai_review(json.dumps({"decision": _d}))
+            assert _p["decision"] == _d, f"940 fail: whitelist {_d} → {_p['decision']}"
+        # Contract fields present with defaults on a minimal payload.
+        _p = _parse_ai_review(json.dumps({"decision": "watch", "confidence": 0.5}))
+        assert _p["confidence"] == 0.5 and _p["evidence_refs"] == [] and _p["abstain_reason"] == "", \
+            f"940 fail: contract defaults {_p}"
+        # 3) Anti-fabrication guard: weak evidence + model claims priority with
+        #    fabricated owner/revenue and refs that do not map to captured
+        #    evidence → priority downgraded to abstain, unbacked refs stripped.
+        _thin = {"name": "Thin Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                 "lead_score": {"score": 20, "tier": "Cold"},
+                 "site_quality": {"status": "unknown", "confidence": "low",
+                                  "automation_gaps": [], "website_score": -1}}
+        _fabricated = json.dumps({
+            "decision": "priority", "confidence": 0.95,
+            "evidence_refs": ["owner", "revenue", "name"],
+            "bottleneck_hypothesis": "hypothesis: owner Mike runs everything manually",
+            "why_now": "revenue $2M/yr and growing fast",
+            "recommended_first_offer": "AI agent to run their books",
+            "email_draft": "Hey Mike...", "phone_opener": "Hi Mike",
+            "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        _thin_before = json.dumps(_thin, sort_keys=True)
+        globals()["AI_REVIEW_MODEL"] = "fake-model-940"
+        globals()["AI_REVIEW_BASE_URL"] = "https://fake-endpoint.example/v1"
+        globals()["AI_REVIEW_API_KEY"] = ""
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _fabricated.decode()}}]}).encode())):
+            _thin_rev = ai_review_candidate(_thin)
+        assert _thin_rev["decision"] == "abstain", \
+            f"940 fail: thin-evidence priority not downgraded ({_thin_rev['decision']})"
+        assert "fabrication guard" in _thin_rev["abstain_reason"], \
+            f"940 fail: wrong downgrade reason {_thin_rev['abstain_reason']}"
+        assert "owner" not in _thin_rev["evidence_refs"], f"940 fail: unbacked ref survived {_thin_rev['evidence_refs']}"
+        assert json.dumps(_thin, sort_keys=True) == _thin_before, "940 fail: ai_review_candidate mutated record"
+        # QC (2026-08-09): the fabricated-priority bypass — site_quality on an
+        # UNKNOWN-status record must NOT count as substantive evidence. A model
+        # citing ['name','site_quality'] with fabricated prose (owner name,
+        # 'AI agent' tool claim) must be downgraded to abstain.
+        _unv = {"name": "Unv Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                "lead_score": {"score": 30, "tier": "Cold"},
+                "site_quality": {"status": "unknown", "confidence": "low",
+                                 "automation_gaps": [], "website_score": -1}}
+        _unv_fab = json.dumps({
+            "decision": "priority", "confidence": 0.95,
+            "evidence_refs": ["name", "site_quality"],
+            "bottleneck_hypothesis": "hypothesis: owner Mike runs everything manually",
+            "why_now": "revenue $2M/yr and growing fast",
+            "recommended_first_offer": "AI agent to run their books",
+            "email_draft": "Hey Mike, your intake is broken",
+            "phone_opener": "Hi Mike", "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _unv_fab.decode()}}]}).encode())):
+            _unv_rev = ai_review_candidate(_unv)
+        assert _unv_rev["decision"] == "abstain", \
+            f"940/QC fail: site_quality(unknown) priority bypass survived ({_unv_rev['decision']})"
+        assert "fabrication guard" in _unv_rev["abstain_reason"], \
+            f"940/QC fail: wrong bypass downgrade reason {_unv_rev['abstain_reason']}"
+        # NaN confidence must not survive parsing (would render 'nan%').
+        _nan = _parse_ai_review(json.dumps({"decision": "watch", "confidence": float("nan")}))
+        assert _nan["confidence"] == 0.0, f"940/QC fail: NaN confidence survived ({_nan['confidence']})"
+        # A 'watch' with mixed refs: valid refs kept, unbacked refs stripped.
+        _mixed = json.dumps({
+            "decision": "watch", "confidence": 0.4,
+            "evidence_refs": ["name", "revenue", "trade"],
+            "bottleneck_hypothesis": "hypothesis: manual intake",
+            "why_now": "", "recommended_first_offer": "",
+            "email_draft": "", "phone_opener": "", "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _mixed.decode()}}]}).encode())):
+            _mixed_rev = ai_review_candidate(_thin)
+        assert _mixed_rev["decision"] == "watch", f"940 fail: watch lost ({_mixed_rev['decision']})"
+        assert _mixed_rev["evidence_refs"] == ["name", "trade"], \
+            f"940 fail: unbacked ref not stripped {_mixed_rev['evidence_refs']}"
+        # 4) SGW-928 alignment: a process-only (non-AI) recommended_first_offer
+        #    survives storage as-is, and the prompt itself must not force
+        #    AI-first language.
+        _proc = {"name": "Proc Co", "trade": "Accounting", "eligibility_state": "eligible",
+                 "phones": ["(951) 225-1131"],
+                 "site_quality": {"status": "up", "confidence": "high",
+                                  "website_score": 1, "automation_gaps": ["no booking system"],
+                                  "platform": "wordpress", "observed_at": "2099-01-01T00:00:00+00:00"},
+                 "lead_score": {"score": 50, "tier": "Warm"},
+                 "hiring_checked_at": "2099-01-01T00:00:00+00:00",
+                 "hiring_role_match": False, "hiring_signals": [],
+                 "review_checked_at": "2099-01-01T00:00:00+00:00",
+                 "review_negative": False, "review_signals": []}
+        _proc_payload = json.dumps({
+            "decision": "priority", "confidence": 0.7,
+            "evidence_refs": ["name", "trade", "phones", "site_quality", "automation_gaps"],
+            "bottleneck_hypothesis": "hypothesis: no booking system means missed intake calls",
+            "why_now": "manual scheduling is visible drag",
+            "recommended_first_offer": "an intake audit that stops missed calls — we fix the process, then decide what software or automation to use",
+            "email_draft": "Subject: missed calls\nMost of your calls are being missed...",
+            "phone_opener": "I'll show you where your intake is leaking calls.",
+            "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _proc_payload.decode()}}]}).encode())):
+            _proc_rev = ai_review_candidate(_proc)
+        assert _proc_rev["decision"] == "priority", f"940 fail: process-only review lost ({_proc_rev['decision']})"
+        assert "audit that stops missed calls" in _proc_rev["recommended_first_offer"], \
+            f"940 fail: process-only offer mangled ({_proc_rev['recommended_first_offer']})"
+        assert _proc_rev["model"] == "fake-model-940" and _proc_rev["provider"] == "https://fake-endpoint.example/v1", \
+            "940 fail: metadata missing"
+        assert _proc_rev["reviewed_at"] and isinstance(_proc_rev["latency_ms"], int) and _proc_rev["tokens_used"] >= 1, \
+            f"940 fail: metadata incomplete {_proc_rev}"
+        # The prompt must not force AI-first language — the invariant
+        # (implementation chosen after diagnosis) is present verbatim.
+        _prompt = _ai_review_prompt(_proc)
+        assert "chosen AFTER diagnosis" in _prompt, "940 fail: prompt lost diagnosis-first invariant"
+        assert "evidence keys you may cite" in _prompt, "940 fail: prompt lost evidence-key whitelist"
+        # 5) Network failure → abstain with the error recorded, no crash.
+        globals()["AI_REVIEW_MODEL"] = "fake-model-940"
+        globals()["AI_REVIEW_BASE_URL"] = "https://fake-endpoint.example/v1"
+        _net = {"name": "Net Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen",
+                                side_effect=urllib.error.URLError("boom")):
+            _net_rev = ai_review_candidate(_net)
+        assert _net_rev["decision"] == "abstain", f"940 fail: network error not abstain ({_net_rev['decision']})"
+        assert "AI review unavailable" in _net_rev["abstain_reason"], \
+            f"940 fail: network error not recorded {_net_rev['abstain_reason']}"
+        assert _net.get("ai_review") is None, "940 fail: network error stored ai_review"
+        # 6) run_ai_review end-to-end with a configured reviewer: bounded to
+        #    eligible/research only, deterministic score order, freshness skip,
+        #    and lead_score/eligibility untouched.
+        _cfg = {"businesses": {
+            "a": {"name": "A Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                  "lead_score": {"score": 40, "tier": "Warm"}},
+            "b": {"name": "B Co", "trade": "Roofing", "eligibility_state": "eligible",
+                  "lead_score": {"score": 80, "tier": "Hot"}},
+            "c": {"name": "C Co", "trade": "HVAC", "eligibility_state": "research",
+                  "lead_score": {"score": 90, "tier": "Warm"}},
+            "d": {"name": "D Co", "trade": "Pest", "eligibility_state": "rejected",
+                  "lead_score": {"score": 99, "tier": "Hot"}},
+            "e": {"name": "E Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                  "lead_score": {"score": 70, "tier": "Warm"},
+                  "ai_review": {"reviewed_at": "2099-01-01T00:00:00+00:00"}},
+        }}
+        _ok_review = json.dumps({
+            "decision": "watch", "confidence": 0.5, "evidence_refs": ["name"],
+            "bottleneck_hypothesis": "hypothesis: unknown", "why_now": "",
+            "recommended_first_offer": "", "email_draft": "",
+            "phone_opener": "", "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        _resp_payload = json.dumps({"choices": [{"message": {"content": _ok_review.decode()}}]}).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(_resp_payload)):
+            _cfg_res = run_ai_review(_cfg)
+        # b (80) and c (90) are eligible/research and score-ordered — both
+        # reviewed even though c's score is higher: eligible first, then score.
+        assert _cfg_res["reviewed"] == 3, f"940 fail: run reviewed {_cfg_res['reviewed']} (expect 3: b, c, a)"
+        assert _cfg_res["decisions"] == {"watch": 3}, f"940 fail: decisions {_cfg_res['decisions']}"
+        assert "ai_review" in _cfg["businesses"]["b"] and "ai_review" in _cfg["businesses"]["c"] \
+            and "ai_review" in _cfg["businesses"]["a"], "940 fail: review not stored on candidates"
+        assert _cfg["businesses"]["d"].get("ai_review") is None, "940 fail: rejected record reviewed"
+        _e_before = json.dumps(_cfg["businesses"]["e"], sort_keys=True)
+        assert json.dumps(_cfg["businesses"]["e"], sort_keys=True) == _e_before, \
+            "940 fail: fresh-review skip mutated record"
+        # Never touches lead_score/eligibility.
+        for _k in ("a", "b", "c", "d", "e"):
+            assert _cfg["businesses"][_k]["eligibility_state"] == _cfg["businesses"][_k].get("eligibility_state"), \
+                "940 fail: eligibility changed"
+        assert _cfg["businesses"]["b"]["lead_score"] == {"score": 80, "tier": "Hot"}, \
+            "940 fail: lead_score changed by AI review"
+        assert _cfg["businesses"]["c"]["lead_score"] == {"score": 90, "tier": "Warm"}, \
+            "940 fail: research lead_score changed by AI review"
+    finally:
+        globals()["AI_REVIEW_MODEL"], globals()["AI_REVIEW_BASE_URL"], \
+            globals()["AI_REVIEW_API_KEY"] = _saved_ai
+
+    # ── SGW-926: WEEKLY BRIEF FIXTURES ────────────────────────────────
+    # (a) deterministic fallback: NO ai_review anywhere → exactly N<=10
+    # entries, every entry has evidence signals + an evidence-specific
+    # draft + a next action; booking-gap record's draft must mention
+    # 'calls'. (b) AI present: priority sorts first with decision+confidence
+    # shown, reject excluded. (c) rejected eligibility excluded. (d)
+    # weak-evidence eligible record omitted. (e) no fabricated owner names.
+    _wb_sq = {"status": "up", "confidence": "high", "website_score": 2,
+              "automation_gaps": ["no booking system"], "emails": []}
+    _wb_cache = {"businesses": {
+        "booking": {"name": "Booking Co", "trade": "Plumbing",
+                    "phones": ["(951) 555-1001"], "own_domains": ["bookingco.com"],
+                    "url": "bookingco.com", "eligibility_state": "eligible",
+                    "lead_score": {"score": 55, "tier": "Warm", "reasons": ["appointment trade with no booking system (+10)"]},
+                    "site_quality": _wb_sq, "hiring_signals": [], "review_signals": []},
+        "weak": {"name": "Weak Co", "trade": "Plumbing", "own_domains": ["weakco.com"],
+                 "url": "weakco.com", "eligibility_state": "eligible",
+                 "lead_score": {"score": 30, "tier": "Cold", "reasons": []}},
+        "rej": {"name": "Rej Co", "trade": "Plumbing", "phones": ["(951) 555-1002"],
+                "own_domains": ["rejco.com"], "url": "rejco.com",
+                "eligibility_state": "rejected", "eligibility_reason": "government/public entity",
+                "lead_score": {"score": 99, "tier": "Hot"},
+                "site_quality": _wb_sq, "hiring_signals": [], "review_signals": []},
+        "picked": {"name": "Picked Co", "trade": "Accounting",
+                   "phones": ["(951) 555-1003"], "own_domains": ["pickedco.com"],
+                   "url": "pickedco.com", "eligibility_state": "eligible",
+                   "lead_score": {"score": 60, "tier": "Warm", "reasons": ["admin/ops business — high intake/scheduling load (+25)"]},
+                   "site_quality": {"status": "up", "confidence": "high", "website_score": 4,
+                                    "automation_gaps": ["no booking/chat system", "no CRM"],
+                                    "emails": []},
+                   "hiring_signals": [], "review_signals": []},
+    }}
+    _det_brief = generate_weekly_brief(_wb_cache)
+    _det_pros = select_weekly_prospects(_wb_cache)
+    assert len(_det_pros) == 2, f"926 fail: fallback selected {len(_det_pros)} (expect 2: booking, picked; weak omitted, rejected excluded)"
+    assert all(b.get("eligibility_state") == "eligible" for b in _det_pros), \
+        "926 fail: non-eligible record in brief"
+    assert "Booking Co" in _det_brief and "Picked Co" in _det_brief, "926 fail: eligible prospect missing"
+    assert "Rej Co" not in _det_brief and "Weak Co" not in _det_brief, \
+        "926 fail: rejected/weak record surfaced in brief"
+    assert "deterministic fallback" in _det_brief, "926 fail: no fallback label with AI off"
+    assert "calls" in _det_brief.lower(), "926 fail: booking-gap draft not evidence-specific (no 'calls')"
+    assert "Next action" in _det_brief and "within 7 days" in _det_brief, \
+        "926 fail: no next action/date in brief"
+    assert "hypothesis:" in _det_brief, "926 fail: bottleneck not labeled as hypothesis"
+    _no_owner = [s for s in ("Hi Mike", "Hi John", "Hi Sarah", "Hi David") if s in _det_brief]
+    assert not _no_owner, f"926 fail: fabricated owner name in draft: {_no_owner}"
+    assert "Owner/decision-maker: unknown" in _det_brief, "926 fail: owner field not unverified"
+
+    # (b) AI present: priority first, reject excluded, decision+confidence shown
+    _wb_cache["businesses"]["picked"]["ai_review"] = {
+        "decision": "priority", "confidence": 0.9, "evidence_refs": ["name"],
+        "bottleneck_hypothesis": "hypothesis: test", "why_now": "test urgency",
+        "recommended_first_offer": "test offer", "email_draft": "test email draft",
+        "phone_opener": "test opener", "missing_evidence": [], "abstain_reason": ""}
+    _wb_cache["businesses"]["booking"]["ai_review"] = {
+        "decision": "reject", "confidence": 0.8, "evidence_refs": ["name"],
+        "bottleneck_hypothesis": "", "why_now": "", "recommended_first_offer": "",
+        "email_draft": "", "phone_opener": "", "missing_evidence": [], "abstain_reason": ""}
+    _ai_pros = select_weekly_prospects(_wb_cache)
+    assert [b["name"] for b in _ai_pros] == ["Picked Co"], \
+        f"926 fail: AI selection {[b['name'] for b in _ai_pros]} (priority first, reject excluded)"
+    _ai_brief = generate_weekly_brief(_wb_cache)
+    assert "AI review: priority (90% confidence)" in _ai_brief, \
+        "926 fail: AI decision/confidence not shown"
+    assert "test email draft" in _ai_brief and "test opener" in _ai_brief, \
+        "926 fail: AI draft/opener not used when present"
+    assert "Booking Co" not in _ai_brief, "926 fail: ai_review reject appeared"
+
+    # (c) abstain → kept, labeled watch, deterministic copy still shown
+    _wb_cache["businesses"]["booking"]["ai_review"] = {
+        "decision": "abstain", "confidence": 0.4, "evidence_refs": ["name"],
+        "bottleneck_hypothesis": "", "why_now": "", "recommended_first_offer": "",
+        "email_draft": "", "phone_opener": "", "missing_evidence": ["no phone"],
+        "abstain_reason": "thin evidence"}
+    _ab_pros = select_weekly_prospects(_wb_cache)
+    assert [b["name"] for b in _ab_pros] == ["Picked Co", "Booking Co"], \
+        f"926 fail: abstain routing {[b['name'] for b in _ab_pros]} (kept with watch label)"
+    _ab_brief = generate_weekly_brief(_wb_cache)
+    assert "abstain" in _ab_brief and "watch" in _ab_brief.lower(), \
+        "926 fail: abstain not labeled watch"
+    assert "missed calls" in _ab_brief, "926 fail: abstain fell back to generic copy"
+
+    # (d) hard cap: 12 candidates → exactly WEEKLY_BRIEF_MAX entries
+    _big = {"businesses": {}}
+    for _i in range(12):
+        _big["businesses"][f"b{_i}"] = {
+            "name": f"Big Co {_i}", "trade": "Plumbing", "phones": [f"(951) 555-1{_i:03d}"],
+            "own_domains": [f"bigco{_i}.com"], "url": f"bigco{_i}.com",
+            "eligibility_state": "eligible", "lead_score": {"score": 50 + _i, "tier": "Warm", "reasons": []},
+            "site_quality": _wb_sq, "hiring_signals": [], "review_signals": []}
+    _cap_pros = select_weekly_prospects(_big)
+    assert len(_cap_pros) == WEEKLY_BRIEF_MAX, \
+        f"926 fail: cap {len(_cap_pros)} (expect {WEEKLY_BRIEF_MAX})"
+    _cap_brief = generate_weekly_brief(_big)
+    _cap_cards = _cap_brief.count('class="wb-card"')
+    assert _cap_cards == WEEKLY_BRIEF_MAX, \
+        f"926 fail: brief HTML has {_cap_cards} cards (expect {WEEKLY_BRIEF_MAX})"
+    # top_n override is clamped to WEEKLY_BRIEF_MAX
+    assert len(select_weekly_prospects(_big, top_n=999)) == WEEKLY_BRIEF_MAX, \
+        "926 fail: --weekly-top 999 not clamped to 10"
+    # generate_weekly_brief is pure — cache untouched
+    _big_snapshot = json.dumps(_big, sort_keys=True)
+    generate_weekly_brief(_big)
+    assert json.dumps(_big, sort_keys=True) == _big_snapshot, \
+        "926 fail: generate_weekly_brief mutated the cache"
+
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -1426,6 +2696,29 @@ def load_cache():
                     brand = _domain_brand_name(biz["own_domains"][0])
                     if brand:
                         biz["name"] = brand
+            # SGW-938 B1: purge cached phone evidence that fails the canonical
+            # NANP validator — contaminated tel:/JSON-LD values ingested before
+            # the validator fix must not keep inflating contactability.
+            # Also scrub the same garbage from site_quality.phones (the other
+            # place phones are stored).
+            for biz in cache["businesses"].values():
+                cleaned = [p for p in (biz.get("phones") or []) if _normalize_phone(p)]
+                if len(cleaned) != len(biz.get("phones") or []):
+                    biz["phones"] = cleaned
+                sq = biz.get("site_quality")
+                if sq and sq.get("phones"):
+                    cleaned_sq = [p for p in sq["phones"] if _normalize_phone(p)]
+                    if len(cleaned_sq) != len(sq["phones"]):
+                        sq["phones"] = cleaned_sq
+            # SGW-941: eligibility gate — after identity re-key + phone purge so
+            # the gate sees resolved names and clean contact paths. Government,
+            # locator/job subdomains, national-enterprise branches, and
+            # directory/SEO listings are rejected (Cold, zeroed score, evidence
+            # preserved); unverifiable records route to research (Cold). The
+            # gate re-runs on every load so newly-ingested junk is caught even
+            # if it slipped the crawl-time check.
+            _elig_counts = apply_eligibility_sweep(cache)
+            log(f"eligibility sweep: {_elig_counts}")
             # Prune stale signals/fb_groups (no date field → keep to be safe)
             cache["signals"] = [s for s in cache.get("signals", []) if s.get("date", "z") > cutoff_sig]
             cache["fb_groups"] = [g for g in cache.get("fb_groups", []) if g.get("date", "z") > cutoff_sig]
@@ -1438,7 +2731,9 @@ def load_cache():
 def save_cache(cache):
     """Save the business cache to disk."""
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CACHE_FILE, "w") as f:
+    # SGW-938 B3: explicit UTF-8 — matches backup_cache(); non-UTF-8 locale
+    # defaults would otherwise throw on non-ASCII cache content.
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2)
 
 
@@ -1743,6 +3038,21 @@ body {
     font-weight: 500;
 }
 
+/* SGW-941: eligibility state note on cards */
+.eligibility-note {
+    margin-top: 8px;
+    font-size: 0.7em;
+    color: var(--text-muted);
+    border-top: 1px dashed var(--border);
+    padding-top: 6px;
+}
+.eligibility-note b {
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-size: 0.9em;
+}
+
 /* ── PITCH LINE ── */
 .pitch-line {
     margin-top: 10px;
@@ -1828,23 +3138,24 @@ details summary:hover { color: var(--blue); }
 
 
 def pitch_for(biz):
-    """T9 + research 2026-08: Derive an OUTCOME-first pitch line (research:
-    'businesses don't buy AI calls, they buy outcomes').
-    ponytail: priority table, first match wins."""
+    """T9 + research 2026-08 + SGW-928: Derive an OUTCOME-first pitch line.
+    Sells the removal of operational drag, never the tool — the implementation
+    (process change, existing software, automation, AI) is chosen AFTER
+    diagnosis. ponytail: priority table, first match wins."""
     trade = biz.get("trade", "")
     if biz.get("review_negative"):
         return "never miss another intake call — customers say you're slow to respond, we fix that"
     if biz.get("hiring_role_match"):
-        return "skip the hire — a digital worker does the role you're posting for, without the salary"
+        return "the role you're hiring for is eating your margins — we take that workload off your plate"
     if trade in ADMIN_TRADES:
-        return "intake, scheduling & follow-up on autopilot — frees your staff for billable work"
+        return "stop letting intake fall through the cracks — your staff gets their time back for billable work"
     if biz.get("hiring_signals"):
-        return "automate the workload behind the job you're hiring for — before you pay the posting"
+        return "the workload behind that job posting is the real cost — we remove it before you pay the salary"
     sq = biz.get("site_quality") or {}
     gaps = sq.get("automation_gaps", [])
     if any(g in gaps for g in ("no booking system", "no booking/chat system")):
-        return "book every call that hits voicemail — automated booking + reminders, no more missed revenue"
-    return "digital worker for intake, scheduling & follow-up — no more hold music"
+        return "book every call that hits voicemail — no more missed revenue"
+    return "every missed call is a missed job — we fix your intake so nothing falls through"
 
 
 def lead_score_badge(tier, score):
@@ -1876,12 +3187,16 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
         is_new = biz.get("first_seen", "") > new_cutoff
         biz["_new"] = is_new
 
-    # T9: Categorize by lead tier — Unverified is its own bucket, not Cold
-    hot, warm, cold, unverified = [], [], [], []
+    # T9: Categorize by lead tier — Unverified is its own bucket, not Cold.
+    # SGW-941: 'research' eligibility is its own bucket, not Cold — these are
+    # not vetted leads and must not look like actionable prospects.
+    hot, warm, cold, unverified, research = [], [], [], [], []
     for biz in businesses.values():
         ls = biz.get("lead_score", {})
         tier = ls.get("tier", "Cold")
-        if tier == "Hot":
+        if biz.get("eligibility_state") == "research":
+            research.append(biz)
+        elif tier == "Hot":
             hot.append(biz)
         elif tier == "Warm":
             warm.append(biz)
@@ -1988,6 +3303,12 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
                 html += f'<span class="reason-tag">{r}</span>'
             html += '</div></details>'
 
+        # SGW-941: eligibility reason — visible in supporting detail so a
+        # rejected/research record explains itself without polluting the pitch.
+        if biz.get("eligibility_state") and biz.get("eligibility_reason"):
+            html += (f'<div class="eligibility-note">Eligibility: '
+                     f'<b>{biz.get("eligibility_state")}</b> — {biz.get("eligibility_reason")}</div>')
+
         html += '</div>'
         return html
 
@@ -2040,6 +3361,22 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
             section += render_lead_card(biz)
         if len(unverified) > 8:
             section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(unverified)-8} more...</p>'
+        section += '</details></div>'
+        cards.append(section)
+
+    # SGW-941: RESEARCH — eligible-looking but not yet verified as a distinct
+    # local business (no contact path, generic title without resolved brand).
+    # Collapsed, clearly labeled as needing research, never in the actionable
+    # stream.
+    if research:
+        section = '<div class="section">'
+        section += '<div class="section-title"><h2>🔬 Research Needed — not yet vetted</h2>'
+        section += f'<span class="badge badge-cold">{len(research)}</span></div>'
+        section += f'<details><summary>{len(research)} businesses — need identity/contact verification before they can be leads</summary>'
+        for biz in research[:8]:
+            section += render_lead_card(biz)
+        if len(research) > 8:
+            section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(research)-8} more...</p>'
         section += '</details></div>'
         cards.append(section)
 
@@ -2097,8 +3434,8 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
 <div class="footer">
     <div class="pitch">
         <strong>Pitch:</strong> "You're growing, you're busy, and leads are slipping through.
-        I install a digital employee that answers calls, books jobs, and follows up — 24/7.
-        It knows your business and gets better every week. 48hr setup."
+        We fix the intake — every call answered, every job booked, follow-up handled.
+        We start with a 48hr assessment and only bring in tooling once we know the fix."
     </div>
     <p>{total_targets} qualified leads from {len(businesses)} businesses scanned</p>
     <p><a href="https://northwebpro.com">northwebpro.com</a></p>
@@ -2116,10 +3453,485 @@ def send_report(cache, zip_code, now, prev_run=None):
     _h = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
     hermes = _h if os.path.isfile(_h) else None
     if hermes:
-        subprocess.run([hermes, "send", "-t", "telegram:-1003913783231:11",
+        # SGW-938 B4: single REPORT_TARGET; check the subprocess return code
+        # instead of printing "sent" regardless. A failing send is a real error.
+        res = subprocess.run([hermes, "send", "-t", REPORT_TARGET,
             f"Lead Scout Report — {now.strftime('%b %d, %H:%M')} PT\nMEDIA:{report_path}"],
-            timeout=30)
-    print(f"HTML report sent: {report_path}")
+            timeout=30, capture_output=True, text=True)
+        if res.returncode != 0:
+            log(f"WARNING: hermes send failed (rc={res.returncode}): {res.stderr.strip()[:200]}")
+            print(f"HTML report written (delivery failed): {report_path}")
+            return
+        print(f"HTML report sent: {report_path}")
+    else:
+        log("hermes binary not found — report written but not delivered")
+        print(f"HTML report written (hermes missing): {report_path}")
+
+
+# ── SGW-926: WEEKLY OWNER-READY PROSPECT BRIEF ─────────────────────────
+# Compact, opt-in outreach pack: max 10 eligible prospects, score-ordered,
+# AI-review decisions applied WHEN PRESENT (reject → excluded, abstain →
+# watch label), deterministic fallback copy when AI is off. Separate from
+# the daily HTML report — no new dashboard, no send wiring. The cache is
+# READ-ONLY here (load_cache()'s eligibility sweep mutates memory only).
+
+WEEKLY_BRIEF_MAX = 10  # SGW-926 hard cap — max 10 priority prospects
+
+
+def _weekly_has_evidence(biz):
+    """True when the record carries at least one deterministic evidence
+    anchor (phone, site automation gap, hiring or review signal). Prevents
+    shell records with nothing observed from filling the brief."""
+    sq = biz.get("site_quality") or {}
+    return bool(biz.get("phones") or sq.get("automation_gaps")
+                or biz.get("hiring_signals") or biz.get("hiring_role_match")
+                or biz.get("review_signals") or biz.get("review_negative"))
+
+
+def _weekly_evidence_signals(biz):
+    """2-4 traceable evidence signals as (signal, ref) pairs. Deterministic
+    — only what was actually captured; never owner/revenue/unverified."""
+    sigs = []
+    sq = biz.get("site_quality") or {}
+    phones = biz.get("phones") or []
+    if phones:
+        sigs.append((f"phone contact captured ({phones[0]})", "phones"))
+    if biz.get("own_domains"):
+        sigs.append((f"verified own website ({biz['own_domains'][0]})", "own_domains"))
+    for g in sq.get("automation_gaps", [])[:3]:
+        sigs.append((f"missing {g}", "site_quality"))
+    if biz.get("hiring_role_match"):
+        sigs.append(("hiring an automatable intake/scheduling role", "hiring"))
+    elif biz.get("hiring_signals"):
+        sigs.append((f"hiring evidence ({len(biz['hiring_signals'])} posting(s))", "hiring"))
+    if biz.get("review_negative"):
+        sigs.append(("reviewers mention slow/no response", "reviews"))
+    if sq.get("has_fax"):
+        sigs.append(("fax number on site — paper-based intake", "paper_signals"))
+    if sq.get("has_outdated_email"):
+        sigs.append(("outdated contact email on site", "paper_signals"))
+    if len(sigs) < 2 and biz.get("snippet"):
+        sigs.append(("crawler snippet captured", "snippet"))
+    return sigs[:4]
+
+
+def select_weekly_prospects(cache, top_n=WEEKLY_BRIEF_MAX):
+    """SGW-926 selection rule: eligible ONLY, at least one evidence anchor,
+    deterministic lead_score score desc; AI decisions applied when present
+    (ai_review decision 'reject' excludes, 'abstain' is kept with a watch
+    label — documented rule, weak records were already omitted by the
+    evidence anchor); hard cap WEEKLY_BRIEF_MAX (default 10, never more).
+    ai_review 'priority' entries sort ahead of the score order."""
+    top_n = max(1, min(int(top_n), WEEKLY_BRIEF_MAX))
+    picked = []
+    for biz in cache.get("businesses", {}).values():
+        # SGW-941: rejected-eligibility records never appear in the brief.
+        if biz.get("eligibility_state") != "eligible":
+            continue
+        if "lead_score" not in biz:
+            biz["lead_score"] = qualify_lead(biz, biz.get("site_quality"))
+        rev = biz.get("ai_review") or {}
+        if rev.get("decision") == "reject":
+            continue  # SGW-926: AI reject never appears either
+        if not _weekly_has_evidence(biz):
+            continue  # weak-evidence prospect — omitted, not surfaced
+        ls = biz.get("lead_score") or {}
+        picked.append((biz, ls.get("score", 0), rev.get("decision")))
+    picked.sort(key=lambda t: (0 if t[2] == "priority" else 1, -t[1]))
+    return [biz for biz, _, _ in picked[:top_n]]
+
+
+def _weekly_hypothesis(biz):
+    """Deterministic bottleneck hypothesis — ALWAYS explicitly labeled as
+    hypothesis (SGW-940 contract style). Derived from top captured signal."""
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    if biz.get("review_negative"):
+        return "hypothesis: intake calls are not answered fast enough, so prospects give up before booking"
+    if biz.get("hiring_role_match"):
+        return "hypothesis: intake/scheduling workload outgrew the team, hence the new hire"
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return "hypothesis: calls outside office hours go unanswered — no self-serve booking exists"
+    if biz.get("trade", "") in ADMIN_TRADES:
+        return "hypothesis: billable staff absorb intake/scheduling manually, cutting into billable hours"
+    if sq.get("has_fax"):
+        return "hypothesis: paper-based intake forces manual re-entry and slows response"
+    if gaps:
+        return "hypothesis: manual follow-through on intake/follow-up is where work slips"
+    return "hypothesis: response handling relies on manual follow-through — unmeasured, unmanaged"
+
+
+def _weekly_impact(biz):
+    """Plain-language likely business impact — grounded in captured signals
+    only; never invents revenue/volume numbers."""
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    if biz.get("review_negative"):
+        return "Slow response costs repeat business and referrals — each unanswered intake is a lost job."
+    if biz.get("hiring_role_match"):
+        return "A full-time hire for intake/scheduling work is salary spent on work automation can absorb."
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return "Calls outside office hours go to voicemail — jobs that were never booked are lost revenue."
+    if biz.get("trade", "") in ADMIN_TRADES:
+        return "Billable staff burn hours on intake/scheduling — that time is the real cost."
+    if gaps:
+        return "Manual steps in intake/follow-up cost staff time on every job."
+    return "Intake depends on manual follow-through — staff time and missed calls are the exposure."
+
+
+def _weekly_fallback_draft(biz):
+    """Deterministic email draft — evidence-SPECIFIC, never generic, never
+    invents owner names / revenue / complaint details beyond captured
+    signals. Reuses the same signal ordering as pitch_for() so the email
+    and phone angle agree. Returns (subject, body)."""
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    name = biz.get("name", "your business")
+    if biz.get("review_negative"):
+        return (f"slow response time — {name}",
+                "Hello,\n\nYour reviews mention slow response — that is missed intake, "
+                "and it costs jobs before you ever see them. We find and fix the "
+                "bottleneck so every call gets handled.\n\nWorth a 15-minute look? "
+                "Reply and I'll send what we'd change first.\n— North Web Pro")
+    if biz.get("hiring_role_match"):
+        return (f"the role you're hiring for — {name}",
+                "Hello,\n\nThe position you're hiring for is largely intake/scheduling "
+                "work we can take off your plate before you pay the salary. "
+                "That frees the budget for the role you actually need.\n\n"
+                "15 minutes this week?\n— North Web Pro")
+    if biz.get("hiring_signals"):
+        return (f"the workload behind the posting — {name}",
+                "Hello,\n\nYou're hiring, which means the current workload already "
+                "outpaces the team. We remove the manual intake/admin part so the "
+                "new hire goes further.\n\n— North Web Pro")
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return (f"missed calls — {name}",
+                "Hello,\n\nYour site has no way to book outside phone hours, so every "
+                "call that hits voicemail is a missed job. We set up intake so "
+                "nothing falls through.\n\nCan I show you what that looks like for "
+                "your business?\n— North Web Pro")
+    if biz.get("trade", "") in ADMIN_TRADES:
+        return (f"intake falling through the cracks — {name}",
+                "Hello,\n\nYour team spends billable hours on intake and scheduling. "
+                "We fix the process so staff get their time back for client work.\n\n"
+                "— North Web Pro")
+    if sq.get("has_fax"):
+        return (f"still running on paper — {name}",
+                "Hello,\n\nYou're still taking intake by fax, which means manual "
+                "re-entry for your staff. We replace that step with something that "
+                "handles itself.\n\n— North Web Pro")
+    if gaps:
+        return (f"what we noticed on your site — {name}",
+                f"Hello,\n\nYour site is missing {' and '.join(gaps[:2])} — each one "
+                "is a place where work lands on your staff. We find and remove that "
+                "drag.\n\n— North Web Pro")
+    return (f"every missed call — {name}",
+            "Hello,\n\nEvery missed call is a missed job, and without booking or "
+            "intake automation some calls are bound to slip. We fix that so nothing "
+            "falls through.\n\n— North Web Pro")
+
+
+def _weekly_next_action(biz):
+    """What is due NEXT: action / date / channel, from verified contact
+    paths only."""
+    phones = biz.get("phones") or []
+    domains = biz.get("own_domains") or []
+    if phones:
+        return ("Call", "within 7 days (next weekly cycle)", f"phone — {phones[0]}")
+    if domains:
+        return ("Submit via website contact form", "within 7 days (next weekly cycle)",
+                f"website — {domains[0]}")
+    return ("Verify contact path first", "within 7 days (next weekly cycle)", "manual lookup")
+
+
+def _weekly_missing(biz):
+    """Missing evidence / reason to skip — deterministic, from what is absent."""
+    missing = []
+    sq = biz.get("site_quality") or {}
+    if not biz.get("phones"):
+        missing.append("no captured phone — contact path unverified")
+    if not biz.get("hiring_checked"):
+        missing.append("no hiring-signal check")
+    if not biz.get("review_checked"):
+        missing.append("no review-signal check")
+    if not isinstance(sq, dict) or sq.get("status") != "up" or sq.get("confidence") != "high":
+        missing.append("site not verified up/high-confidence")
+    rev = biz.get("ai_review") or {}
+    if rev.get("missing_evidence"):
+        missing.extend(rev["missing_evidence"][:2])
+    return "; ".join(missing) if missing else "none — evidence sufficient for outreach"
+
+
+_WEEKLY_BRIEF_CSS = """
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#d4d4d4;margin:0;padding:16px;line-height:1.45}
+.wrap{max-width:760px;margin:0 auto}
+h1{font-size:20px;color:#fff;margin:0 0 4px}
+.sub{color:#8a8a8a;font-size:13px;margin-bottom:16px}
+.wb-card{background:#141414;border:1px solid #292929;border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.wb-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.wb-name{font-size:16px;font-weight:600;color:#fff}
+.wb-meta{font-size:12px;color:#8a8a8a}
+.wb-score{color:#D97548;font-weight:600;font-size:13px}
+.wb-label{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin:6px 4px 0 0}
+.lbl-priority{background:#D97548;color:#0a0a0a}.lbl-watch{background:#5a4a2a;color:#ffd479}.lbl-fallback{background:#292929;color:#60CFF4}
+.wb-field{font-size:12px;color:#8a8a8a;margin-top:10px;text-transform:uppercase;letter-spacing:.05em}
+.wb-body{font-size:13px;color:#d4d4d4;margin-top:2px}
+.ref{color:#60CFF4}
+.wb-draft{background:#0f0f0f;border-left:3px solid #60CFF4;padding:8px 10px;border-radius:0 6px 6px 0;font-size:13px;margin-top:2px;white-space:pre-line}
+ul{margin:4px 0 0 16px;padding:0}
+li{font-size:13px;margin-bottom:2px}
+.footer{color:#5a5a5a;font-size:12px;margin-top:8px;text-align:center}
+"""
+
+
+def _weekly_card_html(biz, idx):
+    """One prospect card per the SGW-926 output contract. All copy is
+    evidence-grounded: owner/decision-maker is reported as unverified (the
+    engine does not capture owner names) and never invented."""
+    ls = biz.get("lead_score") or {}
+    score = ls.get("score", 0)
+    rev = biz.get("ai_review") or {}
+    dec = rev.get("decision", "")
+    if dec == "abstain":
+        dec_label, dec_cls = "AI review: abstain → watch", "lbl-watch"
+    elif dec:
+        conf = rev.get("confidence")
+        cstr = f" ({conf:.0%} confidence)" if isinstance(conf, (int, float)) else ""
+        dec_label = f"AI review: {dec}{cstr}"
+        dec_cls = "lbl-priority" if dec == "priority" else "lbl-watch"
+    else:
+        dec_label, dec_cls = "deterministic fallback", "lbl-fallback"
+
+    sigs = _weekly_evidence_signals(biz)
+    why = [f"{s} <span class='ref'>({ref})</span>" for s, ref in sigs]
+    if len(sigs) < 2:  # pad to a readable why with the same evidence, via reasons
+        why.extend((ls.get("reasons") or [])[: 2 - len(sigs)])
+
+    # AI copy wins when present and substantive; abstain falls back to
+    # deterministic copy (the decision label still shows).
+    use_ai = dec and dec != "abstain"
+    subject, body = _weekly_fallback_draft(biz)
+    if use_ai and rev.get("email_draft"):
+        subject, body = None, rev["email_draft"]
+    opener = f"{pitch_for(biz)} — this is North Web Pro, is this {biz.get('name', '')}?"
+    if use_ai and rev.get("phone_opener"):
+        opener = rev["phone_opener"]
+    angle = pitch_for(biz)
+    if use_ai and rev.get("recommended_first_offer"):
+        angle = rev["recommended_first_offer"]
+    hyp = rev.get("bottleneck_hypothesis") if use_ai and rev.get("bottleneck_hypothesis") \
+        else _weekly_hypothesis(biz)
+    if not str(hyp or "").lower().startswith("hypothesis"):
+        hyp = f"hypothesis: {hyp}"
+    impact = rev.get("why_now") if use_ai and rev.get("why_now") else _weekly_impact(biz)
+
+    phones = biz.get("phones") or []
+    domains = biz.get("own_domains") or []
+    if phones:
+        contacts = f"primary: {phones[0]}"
+        if len(phones) > 1:
+            contacts += f" · backup: {phones[1]}"
+    elif domains:
+        contacts = f"website: {domains[0]} (no phone captured)"
+    else:
+        contacts = "none captured — unverified"
+    action, when, channel = _weekly_next_action(biz)
+
+    subject_html = f"<div class='wb-body'><b>Subject:</b> {subject}</div>" if subject else ""
+    return f"""
+<div class="wb-card">
+  <div class="wb-head">
+    <span class="wb-name">{idx}. {biz.get('name', '')}</span>
+    <span class="wb-score">{score}/100</span>
+  </div>
+  <div class="wb-meta">Vertical: {biz.get('trade', 'unknown')} · Owner/decision-maker: unknown / not captured</div>
+  <span class="wb-label {dec_cls}">{dec_label}</span>
+  <div class="wb-field">Why it's on the list</div>
+  <ul>{''.join(f'<li>{w}</li>' for w in why[:4])}</ul>
+  <div class="wb-field">Bottleneck hypothesis</div>
+  <div class="wb-body">{hyp}</div>
+  <div class="wb-field">Likely business impact</div>
+  <div class="wb-body">{impact}</div>
+  <div class="wb-field">Recommended first diagnostic / angle</div>
+  <div class="wb-body">{angle}</div>
+  <div class="wb-field">Contact paths (verified only)</div>
+  <div class="wb-body">{contacts}</div>
+  <div class="wb-field">Email draft</div>
+  <div class="wb-draft">{subject_html}{body}</div>
+  <div class="wb-field">Phone opener</div>
+  <div class="wb-body">{opener}</div>
+  <div class="wb-field">Next action</div>
+  <div class="wb-body"><b>{action}</b> — {when} · channel: {channel}</div>
+  <div class="wb-field">Missing evidence / skip</div>
+  <div class="wb-body">{_weekly_missing(biz)}</div>
+</div>"""
+
+
+def generate_weekly_brief(cache, top_n=WEEKLY_BRIEF_MAX):
+    """SGW-926: render the weekly owner-ready prospect brief HTML. Pure —
+    no file writes (write_weekly_brief persists it). Deterministic when
+    ai_review is absent; AI decisions layered on when present."""
+    prospects = select_weekly_prospects(cache, top_n=top_n)
+    now = datetime.now(timezone.utc)
+    week = now.strftime("%b %d, %Y")
+    n = len(prospects)
+    ai_note = ("AI review: on (decisions applied)" if any(
+        (b.get("ai_review") or {}).get("decision") for b in prospects)
+        else "AI review: off — deterministic fallback copy")
+    cards = "\n".join(_weekly_card_html(b, i + 1) for i, b in enumerate(prospects))
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Prospect Brief — {week}</title>
+<style>{_WEEKLY_BRIEF_CSS}</style></head>
+<body><div class="wrap">
+<h1>Weekly Prospect Brief — week of {week}</h1>
+<div class="sub">{n} priority prospects (max {WEEKLY_BRIEF_MAX}, eligible only) · {ai_note} ·
+generated by SGW-926, cache read-only</div>
+{cards}
+<div class="footer">North Web Pro — diagnosis first, tooling after. All copy grounded in captured
+evidence; owner names/revenue are never assumed.</div>
+</div></body></html>"""
+
+
+def write_weekly_brief(cache, top_n=WEEKLY_BRIEF_MAX):
+    """SGW-926: persist the brief to REPORT_DIR (same path as the daily
+    report) as weekly-brief-YYYYMMDD.html. Prints the path — no send logic
+    (the existing hermes-send path is deliberately NOT wired here)."""
+    html = generate_weekly_brief(cache, top_n=top_n)
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    path = REPORT_DIR / f"weekly-brief-{datetime.now(timezone.utc).strftime('%Y%m%d')}.html"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"Weekly brief written: {path}")
+    return path
+
+
+# ── SGW-939: SIGNAL COVERAGE SWEEP + REPORT ────────────────────────────
+def _signal_checked_recently(biz):
+    """SGW-939: True when a business has FRESH (<= SIGNAL_RECHECK_DAYS) checks
+    for BOTH hiring and reviews. A check WITHOUT a timestamp is treated as
+    stale — we cannot verify when it happened, and the coverage report (which
+    requires *_checked_at) would otherwise show 0% forever for legacy entries
+    while the sweep never re-checks them. Re-checking stamps the timestamp."""
+    fresh = True
+    for key in ("hiring_checked_at", "review_checked_at"):
+        ts = biz.get(key)
+        if not ts:
+            return False  # never checked, or legacy checked without timestamp → needs re-check
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).days
+        except ValueError:
+            return False
+        if age > SIGNAL_RECHECK_DAYS:
+            fresh = False
+    return fresh
+
+
+def signal_sweep_candidates(cache):
+    """SGW-939: eligible prospects that need a fresh signal check, in
+    processing priority order. Priority = needs-most-urgently first:
+    1) never checked, highest current score; 2) stale (recheck overdue).
+    Replaces the old 'top N by score only' selection which re-checked the
+    same high-scorers every run and starved the rest."""
+    candidates = []
+    for norm, biz in cache.get("businesses", {}).items():
+        sq = biz.get("site_quality")
+        # Only leads with a website check can carry signal evidence (T14 keeps
+        # 'unknown' sites eligible — they can ONLY be scored on external signals).
+        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
+            continue
+        if len(biz.get("name", "")) < 3:
+            continue
+        # QC (2026-08-09): rejected records (government, directories, national
+        # enterprises) are never owner-facing — re-checking their hiring/review
+        # signals wastes sweep budget. research records stay eligible (the
+        # website-check loop can promote them once contact is found).
+        if biz.get("eligibility_state") == "rejected":
+            continue
+        never_h = not biz.get("hiring_checked")
+        never_r = not biz.get("review_checked")
+        stale_h = _signal_checked_recently(biz) is False and not never_h
+        stale_r = _signal_checked_recently(biz) is False and not never_r
+        if never_h and never_r:
+            priority = 0
+        elif never_h or never_r:
+            priority = 1
+        elif stale_h or stale_r:
+            priority = 2
+        else:
+            continue  # fresh on both — nothing to do
+        score = biz.get("lead_score", {}).get("score", 0)
+        candidates.append((priority, -score, norm, biz))
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    return candidates
+
+
+def generate_coverage_report(cache, out_path=None):
+    """SGW-939: deterministic coverage report — what percentage of eligible
+    prospects has fresh hiring/review evidence, and what's still missing.
+    Written to SIGNAL_COVERAGE_REPORT (or out_path when a run happens before
+    the crawl/save completes). Pure cache read; no network. Returns the dict."""
+    report_path = Path(os.path.expanduser(out_path or SIGNAL_COVERAGE_REPORT))
+    bizs = cache.get("businesses", {})
+    total = len(bizs)
+    eligible = 0
+    fresh_both = 0
+    never_checked = 0
+    by_collector = {"hiring": 0, "review": 0}
+    warm_eligible = 0
+    warm_fresh = 0
+    for biz in bizs.values():
+        sq = biz.get("site_quality")
+        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
+            continue
+        if len(biz.get("name", "")) < 3:
+            continue
+        # QC (2026-08-09): rejected records are zeroed to Cold and never get
+        # re-checked — counting them in the denominator would permanently
+        # depress coverage (e.g. government entities that will never have
+        # hiring/review evidence). research records stay in the denominator:
+        # they can still be promoted and checked.
+        if biz.get("eligibility_state") == "rejected":
+            continue
+        eligible += 1
+        h = biz.get("hiring_checked") and biz.get("hiring_checked_at") and \
+            (datetime.now(timezone.utc) - datetime.fromisoformat(biz["hiring_checked_at"])).days <= SIGNAL_RECHECK_DAYS
+        r = biz.get("review_checked") and biz.get("review_checked_at") and \
+            (datetime.now(timezone.utc) - datetime.fromisoformat(biz["review_checked_at"])).days <= SIGNAL_RECHECK_DAYS
+        if not biz.get("hiring_checked") or not biz.get("review_checked"):
+            never_checked += 1
+        if h:
+            by_collector["hiring"] += 1
+        if r:
+            by_collector["review"] += 1
+        if h and r:
+            fresh_both += 1
+        if (biz.get("lead_score") or {}).get("tier") in ("Warm", "Hot"):
+            warm_eligible += 1
+            if h and r:
+                warm_fresh += 1
+    pct_both = (fresh_both * 100 // eligible) if eligible else 0
+    report = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "target_percent": SIGNAL_COVERAGE_TARGET,
+        "businesses_total": total,
+        "eligible": eligible,
+        "fresh_both": fresh_both,
+        "fresh_both_percent": pct_both,
+        "by_collector": by_collector,
+        "never_checked": never_checked,
+        "warm_eligible": warm_eligible,
+        "warm_fresh": warm_fresh,
+    }
+    try:
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+    except OSError as e:
+        log(f"coverage report write failed: {e}")
+    log(f"coverage: {fresh_both}/{eligible} eligible ({pct_both}%) fresh on both — target {SIGNAL_COVERAGE_TARGET}%")
+    return report
 
 
 def main():
@@ -2133,11 +3945,80 @@ def main():
     parser.add_argument("--briefing", action="store_true", help="Just print the briefing from cache (no crawl)")
     parser.add_argument("--html", action="store_true", help="Generate HTML report instead of text")
     parser.add_argument("--backup", action="store_true", help="Write a timestamped cache backup")
+    parser.add_argument("--self-check", action="store_true",
+                        help="SGW-938 B6: run the scoring/identity self-test and exit "
+                             "(no crawl, no network). Exit code 0 = all assertions pass.")
+    parser.add_argument("--coverage", action="store_true",
+                        help="SGW-939: write the signal-coverage report from cache and exit "
+                             "(no crawl, no network). Shows what %% of eligible prospects "
+                             "have fresh hiring/review evidence.")
     parser.add_argument("--disable-collector", action="append", default=[],
                         help="Disable a collector by name (crawl_search, website_check, "
                              "hiring_signals, review_signals, buying_signals). Repeatable. "
                              "SGW-863: proves disabling a source doesn't break the run.")
+    parser.add_argument("--places", action="store_true",
+                        help="SGW-925: Google Places identity enrichment pass over "
+                             "eligible/research records (requires GOOGLE_PLACES_API_KEY; "
+                             "bounded by PLACES_MAX_PER_RUN). No key → skip, exit 0.")
+    parser.add_argument("--ai-review", action="store_true",
+                        help="SGW-940: grounded AI second-pass review of eligible/research "
+                             "candidates (requires AI_REVIEW_MODEL + AI_REVIEW_BASE_URL; "
+                             "bounded by AI_REVIEW_MAX_CANDIDATES). Advisory only — never "
+                             "changes lead_score or eligibility. Unconfigured → skip, exit 0.")
+    parser.add_argument("--weekly-brief", action="store_true",
+                        help="SGW-926: write the weekly owner-ready prospect brief "
+                             "weekly-brief-YYYYMMDD.html to the reports dir from cache "
+                             "(read-only, no crawl, no send). Max 10 eligible prospects, "
+                             "score-ordered; AI decisions applied when present, "
+                             "deterministic fallback copy otherwise.")
+    parser.add_argument("--weekly-top", type=int, default=WEEKLY_BRIEF_MAX,
+                        help=f"SGW-926: max prospects in the weekly brief (default "
+                             f"{WEEKLY_BRIEF_MAX}, hard cap {WEEKLY_BRIEF_MAX}).")
     args = parser.parse_args()
+
+    # SGW-938 B6: self-check mode — the previously-dead _test_qualify_lead()
+    # is now a supported entry point for the repo verification command.
+    if args.self_check:
+        _test_qualify_lead()
+        sys.exit(0)
+
+    # SGW-939: coverage report from cache only — no crawl, no network.
+    if args.coverage:
+        cache = load_cache()
+        report = generate_coverage_report(cache)
+        print(f"Coverage report: {json.dumps(report, indent=2)}")
+        sys.exit(0)
+
+    # SGW-925: standalone Places enrichment pass — cache only, no crawl, no
+    # SearXNG. Without a key this logs one line and exits 0 (zero requests).
+    if args.places:
+        cache = load_cache()
+        n = run_places_enrichment(cache)
+        if n:
+            save_cache(cache)
+        log(f"Places enrichment: {n} records checked")
+        sys.exit(0)
+
+    # SGW-940: standalone grounded AI review pass — cache only, no crawl.
+    # Explicit OPT-IN: never auto-runs on normal crawls (cost discipline).
+    # Unconfigured (no model or no base_url) → one log line, exit 0, zero
+    # network, cache untouched. Never modifies lead_score/eligibility —
+    # advisory opinions land under biz['ai_review'] for the SGW-926 brief.
+    if args.ai_review:
+        cache = load_cache()
+        res = run_ai_review(cache)
+        if res["reviewed"]:
+            save_cache(cache)
+        log(f"AI review: {res['reviewed']} candidates reviewed ({res['decisions']})")
+        sys.exit(0)
+
+    # SGW-926: weekly brief from cache only — read-only, no crawl, no send.
+    # Runs after --ai-review so an AI pass (when configured) can land fresh
+    # reviews in the cache before the brief consumes them.
+    if args.weekly_brief:
+        cache = load_cache()
+        write_weekly_brief(cache, top_n=args.weekly_top)
+        sys.exit(0)
 
     # SGW-863: config-gated collectors — disable at runtime via CLI
     for cname in args.disable_collector:
@@ -2213,7 +4094,21 @@ def main():
 
                 phones = extract_phones(title + " " + snippet)
                 domain = re.sub(r'https?://(www\.)?', '', url.lower()).split('/')[0]
-                is_own_site = not any(agg in domain for agg in AGGREGATOR_DOMAINS)
+                # SGW-938 B2: boundary match, not substring — 'prfamilylawyers.com'
+                # must be treated as its own domain, not an aggregator echo.
+                is_own_site = not _is_aggregator_domain(domain)
+
+                # SGW-941: eligibility gate at ingest — rejected entities
+                # (government, locator/job subdomains, national enterprise
+                # branches, directory/SEO listings) NEVER enter the cache.
+                # Research/eligible records are stored with their state; the
+                # load-time sweep re-assesses after the website check merges
+                # phones, promoting eligible records on the next run.
+                _elig_state, _elig_reason = assess_eligibility(
+                    url, name, trade, phones, [domain] if is_own_site else [])
+                if _elig_state == "rejected":
+                    log(f"  eligibility rejected at ingest ({_elig_reason}): {name}")
+                    continue
 
                 # Fix 2: dedup by domain — find existing entry with same domain
                 existing_norm = None
@@ -2247,6 +4142,7 @@ def main():
                         "dir_domains": [] if is_own_site else [domain],
                         "first_seen": now.isoformat(), "last_seen": now.isoformat(),
                         "url": urlkey, "site_quality": None,
+                        "eligibility_state": _elig_state, "eligibility_reason": _elig_reason,
                     }
             time.sleep(args.delay)
 
@@ -2283,32 +4179,38 @@ def main():
             biz["emails"] = existing_emails
         # Compute lead qualification score
         biz["lead_score"] = qualify_lead(biz, sq)
+        # SGW-941: re-assess eligibility now that the website check merged
+        # phones/emails — a research record without contact at ingest can
+        # become eligible once the site yields a contact path. The score is
+        # recomputed only when the record is eligible; otherwise the next
+        # load-time sweep routes it correctly.
+        if biz.get("eligibility_state") == "research":
+            _state, _reason = assess_eligibility(
+                biz.get("url", "") or (biz.get("own_domains") or [""])[0],
+                biz.get("name", ""), biz.get("trade", ""),
+                biz.get("phones", []), biz.get("own_domains", []))
+            biz["eligibility_state"] = _state
+            biz["eligibility_reason"] = _reason
+            if _state == "eligible":
+                biz["lead_score"] = qualify_lead(biz, sq)
         checks_done += 1
         time.sleep(0.5)
 
     log(f"Websites checked: {checks_done}")
 
-    # ── PHASE 2: HIRING + REVIEW SIGNALS for top-scored leads ──
-    # Only run signal searches for leads that already have a website check (sq present)
-    # and haven't been checked yet. Limit to top 8 leads per run to respect rate limits.
-    scored_leads = []
-    for norm, biz in cache["businesses"].items():
-        sq = biz.get("site_quality")
-        # T14: include "unknown" (unreachable) — those leads can ONLY be scored on
-        # external signals, so they need the hiring/review search the most.
-        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
-            continue
-        if biz.get("hiring_checked") and biz.get("review_checked"):
-            continue  # Already checked both
-        score = biz.get("lead_score", {}).get("score", 0)
-        scored_leads.append((score, norm, biz))
-    # Sort by score descending, take top 8
-    scored_leads.sort(key=lambda x: x[0], reverse=True)
+    # ── PHASE 2: HIRING + REVIEW SIGNALS — bounded coverage sweep (SGW-939) ──
+    # Replaces the old "top 8 by score, every run" loop which re-checked the
+    # same high-scorers and starved never-checked prospects. Now: process up to
+    # SIGNAL_SWEEP_LIMIT eligible candidates per run, prioritizing never-checked
+    # (highest score first), then stale (recheck overdue). A backfill over a few
+    # runs reaches every eligible prospect. Per-run request budget unchanged
+    # (~2 queries per signal × 6s delay ≈ 3–4 min worst case).
+    candidates = signal_sweep_candidates(cache)
+    log(f"Signal sweep: {len(candidates)} candidates need fresh checks "
+        f"(processing up to {SIGNAL_SWEEP_LIMIT} this run)")
     signal_checks = 0
-    max_signal_checks = 8  # 8 leads × up to 3 queries × 6s delay ≈ 2.5 min max
-
-    for score, norm, biz in scored_leads:
-        if signal_checks >= max_signal_checks:
+    for _prio, _neg_score, norm, biz in candidates[:SIGNAL_SWEEP_LIMIT]:
+        if signal_checks >= SIGNAL_SWEEP_LIMIT:
             break
         biz_name = biz.get("name", "")
         if not biz.get("hiring_checked") and len(biz_name) >= 3:
@@ -2316,7 +4218,7 @@ def main():
             run_collector("hiring_signals", search_hiring_signals, biz_name, norm, cache)
             signal_checks += 1
             time.sleep(6)
-        if signal_checks >= max_signal_checks:
+        if signal_checks >= SIGNAL_SWEEP_LIMIT:
             break
         if not biz.get("review_checked") and len(biz_name) >= 3:
             log(f"  Review signals: {biz_name}")
@@ -2382,6 +4284,13 @@ def main():
     if args.backup:
         backup_path = backup_cache(cache)
         log(f"Cache backed up to {backup_path}")
+
+    # SGW-939: post-run coverage snapshot — always written so the deterministic
+    # coverage trend is queryable without a separate invocation.
+    try:
+        generate_coverage_report(cache)
+    except Exception as e:  # noqa: BLE001 — reporting must never kill the run
+        log(f"coverage report failed: {e}")
 
     log(f"Cache: {len(cache['businesses'])} businesses, {len(cache.get('signals', []))} signals, {len(cache.get('fb_groups', []))} groups")
     log(f"Queries: {searx_ok} ok / {searx_empty} empty")

@@ -4,11 +4,12 @@
 > only one to avoid drift.
 
 This repo is a **cron-driven lead-generation pipeline for North Web Pro**, an
-**AI consultancy**. The seller's offer is **custom software and AI agents on
-retainer** that remove repetitive, manual, human-bottlenecked work — phone
-answering, scheduling, intake, follow-up, data entry, document handling — so a
-client can move onto the new digital frontier instead of being slowed by old
-ways and bad habits. **North Web Pro does not sell websites.** A site audit is
+**AI consultancy**. North Web Pro **diagnoses and removes operational drag** —
+the repetitive, manual, human-bottlenecked work that slows a client down (phone
+answering, scheduling, intake, follow-up, data entry, document handling). The
+fix may be a process change, better use of existing software, an integration,
+automation, custom software, or AI; the implementation tool is chosen **after**
+the diagnosis. **North Web Pro does not sell websites.** A site audit is
 only useful here as evidence of *manual operational drag*, never as the product.
 
 Read this before touching code. Then pick a task from `PRD.md`.
@@ -17,14 +18,15 @@ Read this before touching code. Then pick a task from `PRD.md`.
 
 ## 1. The one rule that governs every change
 
-**Score and rank businesses by how likely they are to BUY AND RETAIN a
-digital-worker retainer — not by how easy it was for the crawler to find a gap.**
+**Score and rank businesses by how much manual operational drag they carry and
+how likely they are to BUY AND RETAIN a diagnosis-and-fix engagement — not by
+how easy it was for the crawler to find a gap.**
 
 The current code inverts this: a website that is **down** or **bot-blocked**
 auto-scores into the Hot tier because "no site = big opportunity." That is a
 crawler-success artifact, not a buying signal. A business with no working site is
 usually defunct or a one-person phone-and-word-of-mouth shop — *no budget, no
-systems to integrate with, worst retainer prospect.*
+systems to integrate with, worst diagnosis-and-fix prospect.*
 
 Before you add or reweight any signal, ask: **"Does this measure repetitive work
 volume, a named pain, or ability to pay?"** If not, it does not belong in the
@@ -60,22 +62,23 @@ Rules that follow from this:
 
 ## 2. The Ideal Customer Profile (ICP)
 
-A great retainer client carries **manual operational drag that software/agents
-remove**, and shows it through signals ranked by how *verifiable* they are (so we
-score facts, not guesses):
+A great prospect carries **manual operational drag that a diagnosis-and-fix
+engagement removes** (via process change, existing software, integration,
+automation, or AI — the tool is chosen after the audit), and shows it through
+signals ranked by how *verifiable* they are (so we score facts, not guesses):
 
 **Tier 1 — structured / externally verifiable (trust these):**
 - **Job postings for automatable roles** — receptionist, scheduler, intake
   coordinator, dispatcher, data-entry, AR/AP clerk, office/appointment
   coordinator. A real posting is hard evidence they are about to pay a human
-  $40–60k/yr for work an agent does. Strongest signal; corroborated by a source,
+  $40–60k/yr for work an engagement removes. Strongest signal; corroborated by a source,
   not inferred from a failed fetch.
 - **Multiple locations / multiple phone lines / a careers page** → operational
-  complexity + budget for a retainer.
+  complexity + budget to fix it.
 
 **Tier 2 — named pain (trust when corroborated about the right business, recent):**
 - Review complaints about responsiveness — "no callback," "slow," "couldn't reach
-  them," "waited days." Exactly the pain our agents remove, stated by the customer.
+  them," "waited days." Exactly the pain we remove, stated by the customer.
 
 **Tier 3 — manual-process tells (supporting evidence only, and only when the page
 was actually read — confidence high):**

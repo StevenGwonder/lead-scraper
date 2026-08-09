@@ -2,7 +2,13 @@
 
 Local business lead generation pipeline for North Web Pro. Scrapes SearXNG for businesses in a target ZIP code, audits their websites, and scores **buying readiness** — not website quality.
 
-North Web Pro sells **custom AI agents on retainer** that remove manual operational drag (phone answering, scheduling, intake, follow-up, data entry). The pipeline ranks businesses by how likely they are to buy that, not by how easy they were to crawl.
+North Web Pro **diagnoses and removes operational drag** — the manual work that
+slows a business down (phone answering, scheduling, intake, follow-up, data
+entry). The fix may be a process change, better use of existing software, an
+integration, automation, custom software, or AI — the implementation tool is
+chosen **after** the diagnosis. The pipeline ranks businesses by how much
+operational drag they carry and how likely they are to act, not by how easy
+they were to crawl.
 
 ## What It Does
 
@@ -35,10 +41,75 @@ Every Hot/Warm card shows a **"Pitch this:"** line derived from the top signal, 
 ## Architecture
 
 - **Incremental crawler**: 6 query groups (A-F) rotate across runs. Each run does 3-4 queries with 6-second delays to respect SearXNG rate limits.
-- **Zero LLM tokens at runtime**: All Python, no AI. Runs via Hermes cron with `no_agent: true`. LLMs are only used by developers editing this code.
+- **Zero LLM tokens at runtime**: All Python, deterministic. Runs via Hermes cron with `no_agent: true`. The optional AI reviewer (SGW-940) is opt-in, advisory, and never required for a report.
 - **JSON cache**: `~/.hermes/scripts/local-biz-cache.json` — Hot/Warm leads kept 30 days, Cold 7 days; signals pruned after 14 days
 - **HTML reports**: Dark North Web Pro branded, written to `~/.hermes/scripts/reports/`
 - **pip allowed**: Install on Hermes before use; justify any new dep against what stdlib already does
+
+## AI review (SGW-940)
+
+Grounding rules: the deterministic pipeline and report are fully functional with AI **disabled** — the engine has zero LLM runtime dependence by default. `--ai-review` is an explicit opt-in second-pass pass over the top N eligible/research candidates (bounded, score-ordered).
+
+- Env: `AI_REVIEW_BASE_URL` (default `https://ollama.com/v1`, OpenAI-compatible `/chat/completions`), `AI_REVIEW_MODEL`, optional `AI_REVIEW_API_KEY`, `AI_REVIEW_MAX_CANDIDATES` (default 15), `AI_REVIEW_MAX_TOKENS`, `AI_REVIEW_TIMEOUT`. Unconfigured → log one line, skip, exit 0.
+- Output contract per prospect: `decision` (priority/research/watch/reject/abstain), `confidence`, `evidence_refs[]`, `bottleneck_hypothesis` (labeled), `why_now`, `recommended_first_offer`, `email_draft`, `phone_opener`, `missing_evidence[]`, `abstain_reason` — stored under `biz["ai_review"]` with model/provider/latency/tokens metadata.
+- Anti-fabrication: `evidence_refs` must map to evidence actually captured on the record; a `priority` verdict without substantive evidence (verified site read, automation gaps, hiring/review evidence, provider corroboration) is downgraded to abstain. The reviewer NEVER changes `lead_score` or `eligibility_state` — it is advisory only. No outbound writes.
+- Deployment host is not decided here (Tahoe pending its runtime audit); the module is host-agnostic stdlib.
+
+## Weekly brief (SGW-926)
+
+`--weekly-brief` writes a compact, owner-ready outreach pack to
+`~/.hermes/scripts/reports/weekly-brief-YYYYMMDD.html` — read from cache
+only (no crawl, no network, no send). Run it once a week by cron; it is
+opt-in and never auto-runs.
+
+- **≤ 10 priority prospects**, `--weekly-top N` to shrink (still ≤ 10).
+- **Eligible only** — SGW-941 rejected records never appear; weak-evidence
+  records (no phone, no site gaps, no hiring/review signals) are omitted.
+- **Score-ordered** by deterministic `lead_score`; AI decisions (SGW-940)
+  are applied **when present**: `priority` sorts first, `reject` excludes,
+  `abstain` is kept with a **watch** label. With AI off, every card is
+  labeled **deterministic fallback** and copy is derived from
+  `lead_score.reasons` + `pitch_for()` + evidence gaps — the brief is fully
+  functional with AI disabled.
+- **No invented facts**: owner/decision-maker is shown as *unknown / not
+  captured* (the engine never captures owner names), no revenue, and
+  complaints are never stated beyond captured review signals.
+- Per-prospect: why it made the list (2-4 traceable signals with refs),
+  labeled bottleneck hypothesis, likely business impact, recommended first
+  diagnostic, verified contact paths only, one evidence-specific email
+  draft (e.g. booking gap → "missed calls" angle), one phone opener, and a
+  **next action / date / channel** — what is due next, not just what the
+  crawler found.
+- No new dashboard: this is a separate compact HTML file in the same
+  reports dir; the daily report and all other behavior are unchanged.
+
+## Eligibility gate (SGW-941)
+
+Before any business can be owner-facing, it must pass a deterministic gate:
+- **rejected** — government/public agencies, corporate locator/job subdomains
+  (`agents.*`, `jobs.*`, `careers.*`), national-enterprise branches (parent
+  platform is not the prospect), and directory/SEO listings. These never enter
+  the cache at crawl time and are swept to Cold (score 0, evidence preserved)
+  on every load.
+- **research** — no verified contact path yet, or no domain/identity to
+  verify. Routed to the collapsed "Research Needed" report section, never Warm.
+- **eligible** — distinct local operating business with a contact path.
+
+The gate re-runs on every cache load, so junk that slips crawl-time checks is
+caught on the next run. `eligibility_state` / `eligibility_reason` are
+persisted per record for debugging.
+
+## Sources (SGW-925)
+
+- **SearXNG (localhost:8888)** is the default and only **required** source —
+  discovery, website audit, hiring/review signals, buying signals.
+- **Google Places identity enrichment is dormant.** It activates only when
+  `GOOGLE_PLACES_API_KEY` is set **and** `--places` is passed (bounded by
+  `PLACES_MAX_PER_RUN`); without a key it logs one line and exits 0 with zero
+  requests. Provider evidence is stored under `provider_evidence` as neutral
+  corroboration only — it is **not** enabled for scoring or routing yet,
+  pending the benchmark comparison required by
+  `docs/source-audit-2026-08.md`. **No provider is locked in.**
 
 ## Website site check (sub-input, not the headline metric)
 
@@ -61,6 +132,10 @@ python3 local-biz-92562.py --html --backup
 # Generate HTML from cache only (no crawl)
 python3 local-biz-92562.py --briefing --html
 
+# Weekly owner-ready prospect brief (SGW-926): cache-only, no crawl/send
+python3 local-biz-92562.py --weekly-brief            # max 10, default
+python3 local-biz-92562.py --weekly-brief --weekly-top 5   # fewer, still ≤10
+
 # Generate text briefing from cache
 python3 local-biz-92562.py --briefing
 
@@ -75,10 +150,15 @@ python3 local-biz-92562.py --group 0 --html
 job_id: 4b49f990a0cf
 name: 92562-local-biz-briefing
 schedule: "0 6,14,22 * * 1-5"  # 6AM, 2PM, 10PM PT weekdays
-deliver: telegram:-5131689526
+deliver: telegram:-1003913783231:11
 no_agent: true
 script: local-biz-92562.py
 ```
+
+Delivery: the cron job's stdout is delivered as a text line (the script
+deliberately emits no MEDIA: tag on stdout); the HTML file attachment is sent
+by the script itself via `hermes send` to the same target (`REPORT_TARGET` in
+`local-biz-92562.py`). One target, one file-delivery owner.
 
 ## Tech Stack
 
