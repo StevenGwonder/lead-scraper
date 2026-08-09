@@ -2504,6 +2504,113 @@ def _test_qualify_lead():
         globals()["AI_REVIEW_MODEL"], globals()["AI_REVIEW_BASE_URL"], \
             globals()["AI_REVIEW_API_KEY"] = _saved_ai
 
+    # ── SGW-926: WEEKLY BRIEF FIXTURES ────────────────────────────────
+    # (a) deterministic fallback: NO ai_review anywhere → exactly N<=10
+    # entries, every entry has evidence signals + an evidence-specific
+    # draft + a next action; booking-gap record's draft must mention
+    # 'calls'. (b) AI present: priority sorts first with decision+confidence
+    # shown, reject excluded. (c) rejected eligibility excluded. (d)
+    # weak-evidence eligible record omitted. (e) no fabricated owner names.
+    _wb_sq = {"status": "up", "confidence": "high", "website_score": 2,
+              "automation_gaps": ["no booking system"], "emails": []}
+    _wb_cache = {"businesses": {
+        "booking": {"name": "Booking Co", "trade": "Plumbing",
+                    "phones": ["(951) 555-1001"], "own_domains": ["bookingco.com"],
+                    "url": "bookingco.com", "eligibility_state": "eligible",
+                    "lead_score": {"score": 55, "tier": "Warm", "reasons": ["appointment trade with no booking system (+10)"]},
+                    "site_quality": _wb_sq, "hiring_signals": [], "review_signals": []},
+        "weak": {"name": "Weak Co", "trade": "Plumbing", "own_domains": ["weakco.com"],
+                 "url": "weakco.com", "eligibility_state": "eligible",
+                 "lead_score": {"score": 30, "tier": "Cold", "reasons": []}},
+        "rej": {"name": "Rej Co", "trade": "Plumbing", "phones": ["(951) 555-1002"],
+                "own_domains": ["rejco.com"], "url": "rejco.com",
+                "eligibility_state": "rejected", "eligibility_reason": "government/public entity",
+                "lead_score": {"score": 99, "tier": "Hot"},
+                "site_quality": _wb_sq, "hiring_signals": [], "review_signals": []},
+        "picked": {"name": "Picked Co", "trade": "Accounting",
+                   "phones": ["(951) 555-1003"], "own_domains": ["pickedco.com"],
+                   "url": "pickedco.com", "eligibility_state": "eligible",
+                   "lead_score": {"score": 60, "tier": "Warm", "reasons": ["admin/ops business — high intake/scheduling load (+25)"]},
+                   "site_quality": {"status": "up", "confidence": "high", "website_score": 4,
+                                    "automation_gaps": ["no booking/chat system", "no CRM"],
+                                    "emails": []},
+                   "hiring_signals": [], "review_signals": []},
+    }}
+    _det_brief = generate_weekly_brief(_wb_cache)
+    _det_pros = select_weekly_prospects(_wb_cache)
+    assert len(_det_pros) == 2, f"926 fail: fallback selected {len(_det_pros)} (expect 2: booking, picked; weak omitted, rejected excluded)"
+    assert all(b.get("eligibility_state") == "eligible" for b in _det_pros), \
+        "926 fail: non-eligible record in brief"
+    assert "Booking Co" in _det_brief and "Picked Co" in _det_brief, "926 fail: eligible prospect missing"
+    assert "Rej Co" not in _det_brief and "Weak Co" not in _det_brief, \
+        "926 fail: rejected/weak record surfaced in brief"
+    assert "deterministic fallback" in _det_brief, "926 fail: no fallback label with AI off"
+    assert "calls" in _det_brief.lower(), "926 fail: booking-gap draft not evidence-specific (no 'calls')"
+    assert "Next action" in _det_brief and "within 7 days" in _det_brief, \
+        "926 fail: no next action/date in brief"
+    assert "hypothesis:" in _det_brief, "926 fail: bottleneck not labeled as hypothesis"
+    _no_owner = [s for s in ("Hi Mike", "Hi John", "Hi Sarah", "Hi David") if s in _det_brief]
+    assert not _no_owner, f"926 fail: fabricated owner name in draft: {_no_owner}"
+    assert "Owner/decision-maker: unknown" in _det_brief, "926 fail: owner field not unverified"
+
+    # (b) AI present: priority first, reject excluded, decision+confidence shown
+    _wb_cache["businesses"]["picked"]["ai_review"] = {
+        "decision": "priority", "confidence": 0.9, "evidence_refs": ["name"],
+        "bottleneck_hypothesis": "hypothesis: test", "why_now": "test urgency",
+        "recommended_first_offer": "test offer", "email_draft": "test email draft",
+        "phone_opener": "test opener", "missing_evidence": [], "abstain_reason": ""}
+    _wb_cache["businesses"]["booking"]["ai_review"] = {
+        "decision": "reject", "confidence": 0.8, "evidence_refs": ["name"],
+        "bottleneck_hypothesis": "", "why_now": "", "recommended_first_offer": "",
+        "email_draft": "", "phone_opener": "", "missing_evidence": [], "abstain_reason": ""}
+    _ai_pros = select_weekly_prospects(_wb_cache)
+    assert [b["name"] for b in _ai_pros] == ["Picked Co"], \
+        f"926 fail: AI selection {[b['name'] for b in _ai_pros]} (priority first, reject excluded)"
+    _ai_brief = generate_weekly_brief(_wb_cache)
+    assert "AI review: priority (90% confidence)" in _ai_brief, \
+        "926 fail: AI decision/confidence not shown"
+    assert "test email draft" in _ai_brief and "test opener" in _ai_brief, \
+        "926 fail: AI draft/opener not used when present"
+    assert "Booking Co" not in _ai_brief, "926 fail: ai_review reject appeared"
+
+    # (c) abstain → kept, labeled watch, deterministic copy still shown
+    _wb_cache["businesses"]["booking"]["ai_review"] = {
+        "decision": "abstain", "confidence": 0.4, "evidence_refs": ["name"],
+        "bottleneck_hypothesis": "", "why_now": "", "recommended_first_offer": "",
+        "email_draft": "", "phone_opener": "", "missing_evidence": ["no phone"],
+        "abstain_reason": "thin evidence"}
+    _ab_pros = select_weekly_prospects(_wb_cache)
+    assert [b["name"] for b in _ab_pros] == ["Picked Co", "Booking Co"], \
+        f"926 fail: abstain routing {[b['name'] for b in _ab_pros]} (kept with watch label)"
+    _ab_brief = generate_weekly_brief(_wb_cache)
+    assert "abstain" in _ab_brief and "watch" in _ab_brief.lower(), \
+        "926 fail: abstain not labeled watch"
+    assert "missed calls" in _ab_brief, "926 fail: abstain fell back to generic copy"
+
+    # (d) hard cap: 12 candidates → exactly WEEKLY_BRIEF_MAX entries
+    _big = {"businesses": {}}
+    for _i in range(12):
+        _big["businesses"][f"b{_i}"] = {
+            "name": f"Big Co {_i}", "trade": "Plumbing", "phones": [f"(951) 555-1{_i:03d}"],
+            "own_domains": [f"bigco{_i}.com"], "url": f"bigco{_i}.com",
+            "eligibility_state": "eligible", "lead_score": {"score": 50 + _i, "tier": "Warm", "reasons": []},
+            "site_quality": _wb_sq, "hiring_signals": [], "review_signals": []}
+    _cap_pros = select_weekly_prospects(_big)
+    assert len(_cap_pros) == WEEKLY_BRIEF_MAX, \
+        f"926 fail: cap {len(_cap_pros)} (expect {WEEKLY_BRIEF_MAX})"
+    _cap_brief = generate_weekly_brief(_big)
+    _cap_cards = _cap_brief.count('class="wb-card"')
+    assert _cap_cards == WEEKLY_BRIEF_MAX, \
+        f"926 fail: brief HTML has {_cap_cards} cards (expect {WEEKLY_BRIEF_MAX})"
+    # top_n override is clamped to WEEKLY_BRIEF_MAX
+    assert len(select_weekly_prospects(_big, top_n=999)) == WEEKLY_BRIEF_MAX, \
+        "926 fail: --weekly-top 999 not clamped to 10"
+    # generate_weekly_brief is pure — cache untouched
+    _big_snapshot = json.dumps(_big, sort_keys=True)
+    generate_weekly_brief(_big)
+    assert json.dumps(_big, sort_keys=True) == _big_snapshot, \
+        "926 fail: generate_weekly_brief mutated the cache"
+
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -3320,6 +3427,345 @@ def send_report(cache, zip_code, now, prev_run=None):
         print(f"HTML report written (hermes missing): {report_path}")
 
 
+# ── SGW-926: WEEKLY OWNER-READY PROSPECT BRIEF ─────────────────────────
+# Compact, opt-in outreach pack: max 10 eligible prospects, score-ordered,
+# AI-review decisions applied WHEN PRESENT (reject → excluded, abstain →
+# watch label), deterministic fallback copy when AI is off. Separate from
+# the daily HTML report — no new dashboard, no send wiring. The cache is
+# READ-ONLY here (load_cache()'s eligibility sweep mutates memory only).
+
+WEEKLY_BRIEF_MAX = 10  # SGW-926 hard cap — max 10 priority prospects
+
+
+def _weekly_has_evidence(biz):
+    """True when the record carries at least one deterministic evidence
+    anchor (phone, site automation gap, hiring or review signal). Prevents
+    shell records with nothing observed from filling the brief."""
+    sq = biz.get("site_quality") or {}
+    return bool(biz.get("phones") or sq.get("automation_gaps")
+                or biz.get("hiring_signals") or biz.get("hiring_role_match")
+                or biz.get("review_signals") or biz.get("review_negative"))
+
+
+def _weekly_evidence_signals(biz):
+    """2-4 traceable evidence signals as (signal, ref) pairs. Deterministic
+    — only what was actually captured; never owner/revenue/unverified."""
+    sigs = []
+    sq = biz.get("site_quality") or {}
+    phones = biz.get("phones") or []
+    if phones:
+        sigs.append((f"phone contact captured ({phones[0]})", "phones"))
+    if biz.get("own_domains"):
+        sigs.append((f"verified own website ({biz['own_domains'][0]})", "own_domains"))
+    for g in sq.get("automation_gaps", [])[:3]:
+        sigs.append((f"missing {g}", "site_quality"))
+    if biz.get("hiring_role_match"):
+        sigs.append(("hiring an automatable intake/scheduling role", "hiring"))
+    elif biz.get("hiring_signals"):
+        sigs.append((f"hiring evidence ({len(biz['hiring_signals'])} posting(s))", "hiring"))
+    if biz.get("review_negative"):
+        sigs.append(("reviewers mention slow/no response", "reviews"))
+    if sq.get("has_fax"):
+        sigs.append(("fax number on site — paper-based intake", "paper_signals"))
+    if sq.get("has_outdated_email"):
+        sigs.append(("outdated contact email on site", "paper_signals"))
+    if len(sigs) < 2 and biz.get("snippet"):
+        sigs.append(("crawler snippet captured", "snippet"))
+    return sigs[:4]
+
+
+def select_weekly_prospects(cache, top_n=WEEKLY_BRIEF_MAX):
+    """SGW-926 selection rule: eligible ONLY, at least one evidence anchor,
+    deterministic lead_score score desc; AI decisions applied when present
+    (ai_review decision 'reject' excludes, 'abstain' is kept with a watch
+    label — documented rule, weak records were already omitted by the
+    evidence anchor); hard cap WEEKLY_BRIEF_MAX (default 10, never more).
+    ai_review 'priority' entries sort ahead of the score order."""
+    top_n = max(1, min(int(top_n), WEEKLY_BRIEF_MAX))
+    picked = []
+    for biz in cache.get("businesses", {}).values():
+        # SGW-941: rejected-eligibility records never appear in the brief.
+        if biz.get("eligibility_state") != "eligible":
+            continue
+        if "lead_score" not in biz:
+            biz["lead_score"] = qualify_lead(biz, biz.get("site_quality"))
+        rev = biz.get("ai_review") or {}
+        if rev.get("decision") == "reject":
+            continue  # SGW-926: AI reject never appears either
+        if not _weekly_has_evidence(biz):
+            continue  # weak-evidence prospect — omitted, not surfaced
+        ls = biz.get("lead_score") or {}
+        picked.append((biz, ls.get("score", 0), rev.get("decision")))
+    picked.sort(key=lambda t: (0 if t[2] == "priority" else 1, -t[1]))
+    return [biz for biz, _, _ in picked[:top_n]]
+
+
+def _weekly_hypothesis(biz):
+    """Deterministic bottleneck hypothesis — ALWAYS explicitly labeled as
+    hypothesis (SGW-940 contract style). Derived from top captured signal."""
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    if biz.get("review_negative"):
+        return "hypothesis: intake calls are not answered fast enough, so prospects give up before booking"
+    if biz.get("hiring_role_match"):
+        return "hypothesis: intake/scheduling workload outgrew the team, hence the new hire"
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return "hypothesis: calls outside office hours go unanswered — no self-serve booking exists"
+    if biz.get("trade", "") in ADMIN_TRADES:
+        return "hypothesis: billable staff absorb intake/scheduling manually, cutting into billable hours"
+    if sq.get("has_fax"):
+        return "hypothesis: paper-based intake forces manual re-entry and slows response"
+    if gaps:
+        return "hypothesis: manual follow-through on intake/follow-up is where work slips"
+    return "hypothesis: response handling relies on manual follow-through — unmeasured, unmanaged"
+
+
+def _weekly_impact(biz):
+    """Plain-language likely business impact — grounded in captured signals
+    only; never invents revenue/volume numbers."""
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    if biz.get("review_negative"):
+        return "Slow response costs repeat business and referrals — each unanswered intake is a lost job."
+    if biz.get("hiring_role_match"):
+        return "A full-time hire for intake/scheduling work is salary spent on work automation can absorb."
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return "Calls outside office hours go to voicemail — jobs that were never booked are lost revenue."
+    if biz.get("trade", "") in ADMIN_TRADES:
+        return "Billable staff burn hours on intake/scheduling — that time is the real cost."
+    if gaps:
+        return "Manual steps in intake/follow-up cost staff time on every job."
+    return "Intake depends on manual follow-through — staff time and missed calls are the exposure."
+
+
+def _weekly_fallback_draft(biz):
+    """Deterministic email draft — evidence-SPECIFIC, never generic, never
+    invents owner names / revenue / complaint details beyond captured
+    signals. Reuses the same signal ordering as pitch_for() so the email
+    and phone angle agree. Returns (subject, body)."""
+    sq = biz.get("site_quality") or {}
+    gaps = sq.get("automation_gaps", [])
+    name = biz.get("name", "your business")
+    if biz.get("review_negative"):
+        return (f"slow response time — {name}",
+                "Hello,\n\nYour reviews mention slow response — that is missed intake, "
+                "and it costs jobs before you ever see them. We find and fix the "
+                "bottleneck so every call gets handled.\n\nWorth a 15-minute look? "
+                "Reply and I'll send what we'd change first.\n— North Web Pro")
+    if biz.get("hiring_role_match"):
+        return (f"the role you're hiring for — {name}",
+                "Hello,\n\nThe position you're hiring for is largely intake/scheduling "
+                "work we can take off your plate before you pay the salary. "
+                "That frees the budget for the role you actually need.\n\n"
+                "15 minutes this week?\n— North Web Pro")
+    if biz.get("hiring_signals"):
+        return (f"the workload behind the posting — {name}",
+                "Hello,\n\nYou're hiring, which means the current workload already "
+                "outpaces the team. We remove the manual intake/admin part so the "
+                "new hire goes further.\n\n— North Web Pro")
+    if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+        return (f"missed calls — {name}",
+                "Hello,\n\nYour site has no way to book outside phone hours, so every "
+                "call that hits voicemail is a missed job. We set up intake so "
+                "nothing falls through.\n\nCan I show you what that looks like for "
+                "your business?\n— North Web Pro")
+    if biz.get("trade", "") in ADMIN_TRADES:
+        return (f"intake falling through the cracks — {name}",
+                "Hello,\n\nYour team spends billable hours on intake and scheduling. "
+                "We fix the process so staff get their time back for client work.\n\n"
+                "— North Web Pro")
+    if sq.get("has_fax"):
+        return (f"still running on paper — {name}",
+                "Hello,\n\nYou're still taking intake by fax, which means manual "
+                "re-entry for your staff. We replace that step with something that "
+                "handles itself.\n\n— North Web Pro")
+    if gaps:
+        return (f"what we noticed on your site — {name}",
+                f"Hello,\n\nYour site is missing {' and '.join(gaps[:2])} — each one "
+                "is a place where work lands on your staff. We find and remove that "
+                "drag.\n\n— North Web Pro")
+    return (f"every missed call — {name}",
+            "Hello,\n\nEvery missed call is a missed job, and without booking or "
+            "intake automation some calls are bound to slip. We fix that so nothing "
+            "falls through.\n\n— North Web Pro")
+
+
+def _weekly_next_action(biz):
+    """What is due NEXT: action / date / channel, from verified contact
+    paths only."""
+    phones = biz.get("phones") or []
+    domains = biz.get("own_domains") or []
+    if phones:
+        return ("Call", "within 7 days (next weekly cycle)", f"phone — {phones[0]}")
+    if domains:
+        return ("Submit via website contact form", "within 7 days (next weekly cycle)",
+                f"website — {domains[0]}")
+    return ("Verify contact path first", "within 7 days (next weekly cycle)", "manual lookup")
+
+
+def _weekly_missing(biz):
+    """Missing evidence / reason to skip — deterministic, from what is absent."""
+    missing = []
+    sq = biz.get("site_quality") or {}
+    if not biz.get("phones"):
+        missing.append("no captured phone — contact path unverified")
+    if not biz.get("hiring_checked"):
+        missing.append("no hiring-signal check")
+    if not biz.get("review_checked"):
+        missing.append("no review-signal check")
+    if not isinstance(sq, dict) or sq.get("status") != "up" or sq.get("confidence") != "high":
+        missing.append("site not verified up/high-confidence")
+    rev = biz.get("ai_review") or {}
+    if rev.get("missing_evidence"):
+        missing.extend(rev["missing_evidence"][:2])
+    return "; ".join(missing) if missing else "none — evidence sufficient for outreach"
+
+
+_WEEKLY_BRIEF_CSS = """
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:#0a0a0a;color:#d4d4d4;margin:0;padding:16px;line-height:1.45}
+.wrap{max-width:760px;margin:0 auto}
+h1{font-size:20px;color:#fff;margin:0 0 4px}
+.sub{color:#8a8a8a;font-size:13px;margin-bottom:16px}
+.wb-card{background:#141414;border:1px solid #292929;border-radius:10px;padding:14px 16px;margin-bottom:14px}
+.wb-head{display:flex;justify-content:space-between;align-items:baseline;gap:8px;flex-wrap:wrap}
+.wb-name{font-size:16px;font-weight:600;color:#fff}
+.wb-meta{font-size:12px;color:#8a8a8a}
+.wb-score{color:#D97548;font-weight:600;font-size:13px}
+.wb-label{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;margin:6px 4px 0 0}
+.lbl-priority{background:#D97548;color:#0a0a0a}.lbl-watch{background:#5a4a2a;color:#ffd479}.lbl-fallback{background:#292929;color:#60CFF4}
+.wb-field{font-size:12px;color:#8a8a8a;margin-top:10px;text-transform:uppercase;letter-spacing:.05em}
+.wb-body{font-size:13px;color:#d4d4d4;margin-top:2px}
+.ref{color:#60CFF4}
+.wb-draft{background:#0f0f0f;border-left:3px solid #60CFF4;padding:8px 10px;border-radius:0 6px 6px 0;font-size:13px;margin-top:2px;white-space:pre-line}
+ul{margin:4px 0 0 16px;padding:0}
+li{font-size:13px;margin-bottom:2px}
+.footer{color:#5a5a5a;font-size:12px;margin-top:8px;text-align:center}
+"""
+
+
+def _weekly_card_html(biz, idx):
+    """One prospect card per the SGW-926 output contract. All copy is
+    evidence-grounded: owner/decision-maker is reported as unverified (the
+    engine does not capture owner names) and never invented."""
+    ls = biz.get("lead_score") or {}
+    score = ls.get("score", 0)
+    rev = biz.get("ai_review") or {}
+    dec = rev.get("decision", "")
+    if dec == "abstain":
+        dec_label, dec_cls = "AI review: abstain → watch", "lbl-watch"
+    elif dec:
+        conf = rev.get("confidence")
+        cstr = f" ({conf:.0%} confidence)" if isinstance(conf, (int, float)) else ""
+        dec_label = f"AI review: {dec}{cstr}"
+        dec_cls = "lbl-priority" if dec == "priority" else "lbl-watch"
+    else:
+        dec_label, dec_cls = "deterministic fallback", "lbl-fallback"
+
+    sigs = _weekly_evidence_signals(biz)
+    why = [f"{s} <span class='ref'>({ref})</span>" for s, ref in sigs]
+    if len(sigs) < 2:  # pad to a readable why with the same evidence, via reasons
+        why.extend((ls.get("reasons") or [])[: 2 - len(sigs)])
+
+    # AI copy wins when present and substantive; abstain falls back to
+    # deterministic copy (the decision label still shows).
+    use_ai = dec and dec != "abstain"
+    subject, body = _weekly_fallback_draft(biz)
+    if use_ai and rev.get("email_draft"):
+        subject, body = None, rev["email_draft"]
+    opener = f"{pitch_for(biz)} — this is North Web Pro, is this {biz.get('name', '')}?"
+    if use_ai and rev.get("phone_opener"):
+        opener = rev["phone_opener"]
+    angle = pitch_for(biz)
+    if use_ai and rev.get("recommended_first_offer"):
+        angle = rev["recommended_first_offer"]
+    hyp = rev.get("bottleneck_hypothesis") if use_ai and rev.get("bottleneck_hypothesis") \
+        else _weekly_hypothesis(biz)
+    if not str(hyp or "").lower().startswith("hypothesis"):
+        hyp = f"hypothesis: {hyp}"
+    impact = rev.get("why_now") if use_ai and rev.get("why_now") else _weekly_impact(biz)
+
+    phones = biz.get("phones") or []
+    domains = biz.get("own_domains") or []
+    if phones:
+        contacts = f"primary: {phones[0]}"
+        if len(phones) > 1:
+            contacts += f" · backup: {phones[1]}"
+    elif domains:
+        contacts = f"website: {domains[0]} (no phone captured)"
+    else:
+        contacts = "none captured — unverified"
+    action, when, channel = _weekly_next_action(biz)
+
+    subject_html = f"<div class='wb-body'><b>Subject:</b> {subject}</div>" if subject else ""
+    return f"""
+<div class="wb-card">
+  <div class="wb-head">
+    <span class="wb-name">{idx}. {biz.get('name', '')}</span>
+    <span class="wb-score">{score}/100</span>
+  </div>
+  <div class="wb-meta">Vertical: {biz.get('trade', 'unknown')} · Owner/decision-maker: unknown / not captured</div>
+  <span class="wb-label {dec_cls}">{dec_label}</span>
+  <div class="wb-field">Why it's on the list</div>
+  <ul>{''.join(f'<li>{w}</li>' for w in why[:4])}</ul>
+  <div class="wb-field">Bottleneck hypothesis</div>
+  <div class="wb-body">{hyp}</div>
+  <div class="wb-field">Likely business impact</div>
+  <div class="wb-body">{impact}</div>
+  <div class="wb-field">Recommended first diagnostic / angle</div>
+  <div class="wb-body">{angle}</div>
+  <div class="wb-field">Contact paths (verified only)</div>
+  <div class="wb-body">{contacts}</div>
+  <div class="wb-field">Email draft</div>
+  <div class="wb-draft">{subject_html}{body}</div>
+  <div class="wb-field">Phone opener</div>
+  <div class="wb-body">{opener}</div>
+  <div class="wb-field">Next action</div>
+  <div class="wb-body"><b>{action}</b> — {when} · channel: {channel}</div>
+  <div class="wb-field">Missing evidence / skip</div>
+  <div class="wb-body">{_weekly_missing(biz)}</div>
+</div>"""
+
+
+def generate_weekly_brief(cache, top_n=WEEKLY_BRIEF_MAX):
+    """SGW-926: render the weekly owner-ready prospect brief HTML. Pure —
+    no file writes (write_weekly_brief persists it). Deterministic when
+    ai_review is absent; AI decisions layered on when present."""
+    prospects = select_weekly_prospects(cache, top_n=top_n)
+    now = datetime.now(timezone.utc)
+    week = now.strftime("%b %d, %Y")
+    n = len(prospects)
+    ai_note = ("AI review: on (decisions applied)" if any(
+        (b.get("ai_review") or {}).get("decision") for b in prospects)
+        else "AI review: off — deterministic fallback copy")
+    cards = "\n".join(_weekly_card_html(b, i + 1) for i, b in enumerate(prospects))
+    return f"""<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Weekly Prospect Brief — {week}</title>
+<style>{_WEEKLY_BRIEF_CSS}</style></head>
+<body><div class="wrap">
+<h1>Weekly Prospect Brief — week of {week}</h1>
+<div class="sub">{n} priority prospects (max {WEEKLY_BRIEF_MAX}, eligible only) · {ai_note} ·
+generated by SGW-926, cache read-only</div>
+{cards}
+<div class="footer">North Web Pro — diagnosis first, tooling after. All copy grounded in captured
+evidence; owner names/revenue are never assumed.</div>
+</div></body></html>"""
+
+
+def write_weekly_brief(cache, top_n=WEEKLY_BRIEF_MAX):
+    """SGW-926: persist the brief to REPORT_DIR (same path as the daily
+    report) as weekly-brief-YYYYMMDD.html. Prints the path — no send logic
+    (the existing hermes-send path is deliberately NOT wired here)."""
+    html = generate_weekly_brief(cache, top_n=top_n)
+    REPORT_DIR.mkdir(parents=True, exist_ok=True)
+    path = REPORT_DIR / f"weekly-brief-{datetime.now(timezone.utc).strftime('%Y%m%d')}.html"
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(html)
+    print(f"Weekly brief written: {path}")
+    return path
+
+
 # ── SGW-939: SIGNAL COVERAGE SWEEP + REPORT ────────────────────────────
 def _signal_checked_recently(biz):
     """SGW-939: True when a business has FRESH (<= SIGNAL_RECHECK_DAYS) checks
@@ -3478,6 +3924,15 @@ def main():
                              "candidates (requires AI_REVIEW_MODEL + AI_REVIEW_BASE_URL; "
                              "bounded by AI_REVIEW_MAX_CANDIDATES). Advisory only — never "
                              "changes lead_score or eligibility. Unconfigured → skip, exit 0.")
+    parser.add_argument("--weekly-brief", action="store_true",
+                        help="SGW-926: write the weekly owner-ready prospect brief "
+                             "weekly-brief-YYYYMMDD.html to the reports dir from cache "
+                             "(read-only, no crawl, no send). Max 10 eligible prospects, "
+                             "score-ordered; AI decisions applied when present, "
+                             "deterministic fallback copy otherwise.")
+    parser.add_argument("--weekly-top", type=int, default=WEEKLY_BRIEF_MAX,
+                        help=f"SGW-926: max prospects in the weekly brief (default "
+                             f"{WEEKLY_BRIEF_MAX}, hard cap {WEEKLY_BRIEF_MAX}).")
     args = parser.parse_args()
 
     # SGW-938 B6: self-check mode — the previously-dead _test_qualify_lead()
@@ -3514,6 +3969,14 @@ def main():
         if res["reviewed"]:
             save_cache(cache)
         log(f"AI review: {res['reviewed']} candidates reviewed ({res['decisions']})")
+        sys.exit(0)
+
+    # SGW-926: weekly brief from cache only — read-only, no crawl, no send.
+    # Runs after --ai-review so an AI pass (when configured) can land fresh
+    # reviews in the cache before the brief consumes them.
+    if args.weekly_brief:
+        cache = load_cache()
+        write_weekly_brief(cache, top_n=args.weekly_top)
         sys.exit(0)
 
     # SGW-863: config-gated collectors — disable at runtime via CLI

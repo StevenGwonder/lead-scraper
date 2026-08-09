@@ -55,6 +55,34 @@ Grounding rules: the deterministic pipeline and report are fully functional with
 - Anti-fabrication: `evidence_refs` must map to evidence actually captured on the record; a `priority` verdict without substantive evidence (verified site read, automation gaps, hiring/review evidence, provider corroboration) is downgraded to abstain. The reviewer NEVER changes `lead_score` or `eligibility_state` — it is advisory only. No outbound writes.
 - Deployment host is not decided here (Tahoe pending its runtime audit); the module is host-agnostic stdlib.
 
+## Weekly brief (SGW-926)
+
+`--weekly-brief` writes a compact, owner-ready outreach pack to
+`~/.hermes/scripts/reports/weekly-brief-YYYYMMDD.html` — read from cache
+only (no crawl, no network, no send). Run it once a week by cron; it is
+opt-in and never auto-runs.
+
+- **≤ 10 priority prospects**, `--weekly-top N` to shrink (still ≤ 10).
+- **Eligible only** — SGW-941 rejected records never appear; weak-evidence
+  records (no phone, no site gaps, no hiring/review signals) are omitted.
+- **Score-ordered** by deterministic `lead_score`; AI decisions (SGW-940)
+  are applied **when present**: `priority` sorts first, `reject` excludes,
+  `abstain` is kept with a **watch** label. With AI off, every card is
+  labeled **deterministic fallback** and copy is derived from
+  `lead_score.reasons` + `pitch_for()` + evidence gaps — the brief is fully
+  functional with AI disabled.
+- **No invented facts**: owner/decision-maker is shown as *unknown / not
+  captured* (the engine never captures owner names), no revenue, and
+  complaints are never stated beyond captured review signals.
+- Per-prospect: why it made the list (2-4 traceable signals with refs),
+  labeled bottleneck hypothesis, likely business impact, recommended first
+  diagnostic, verified contact paths only, one evidence-specific email
+  draft (e.g. booking gap → "missed calls" angle), one phone opener, and a
+  **next action / date / channel** — what is due next, not just what the
+  crawler found.
+- No new dashboard: this is a separate compact HTML file in the same
+  reports dir; the daily report and all other behavior are unchanged.
+
 ## Eligibility gate (SGW-941)
 
 Before any business can be owner-facing, it must pass a deterministic gate:
@@ -103,6 +131,10 @@ python3 local-biz-92562.py --html --backup
 
 # Generate HTML from cache only (no crawl)
 python3 local-biz-92562.py --briefing --html
+
+# Weekly owner-ready prospect brief (SGW-926): cache-only, no crawl/send
+python3 local-biz-92562.py --weekly-brief            # max 10, default
+python3 local-biz-92562.py --weekly-brief --weekly-top 5   # fewer, still ≤10
 
 # Generate text briefing from cache
 python3 local-biz-92562.py --briefing
