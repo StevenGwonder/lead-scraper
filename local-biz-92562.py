@@ -418,6 +418,14 @@ NAME_SUFFIXES = [
     " - Threads", " | Threads", " - Reddit", " | Reddit",
 ]
 
+# ── SGW-939: SIGNAL COVERAGE CONFIG ────────────────────────────────────
+# Strong-signal enrichment (hiring + review) replaces the old "top 8 per run"
+# cap with a bounded sweep that eventually reaches every eligible prospect.
+SIGNAL_RECHECK_DAYS = 14       # freshness window — re-run checks older than this
+SIGNAL_SWEEP_LIMIT = 12        # eligible prospects processed per run
+SIGNAL_COVERAGE_TARGET = 90    # % of eligible prospects to reach (report only)
+SIGNAL_COVERAGE_REPORT = "~/.hermes/scripts/reports/coverage-report.json"
+
 # ── SCORING MODEL ──────────────────────────────────────────────────────
 # Edit the ICP philosophy here — see PRD.md §2.
 # 5-pillar buying-readiness model; max 100. Contactability is a gate, not a scored pillar.
@@ -984,7 +992,18 @@ def search_hiring_signals(biz_name, cache_key, cache):
     if not biz_name or len(biz_name) < 3:
         return False
     cached = cache.get("businesses", {}).get(cache_key, {})
-    if cached.get("hiring_checked"):
+    # SGW-939: freshness — a check older than SIGNAL_RECHECK_DAYS is re-run
+    # (job postings rot; a stale "not hiring" from months ago is not current).
+    _checked_at = cached.get("hiring_checked_at")
+    if cached.get("hiring_checked") and _checked_at:
+        try:
+            _age = (datetime.now(timezone.utc) - datetime.fromisoformat(_checked_at)).days
+        except ValueError:
+            _age = 0
+        if _age <= SIGNAL_RECHECK_DAYS:
+            return bool(cached.get("hiring_signals", []))
+    elif cached.get("hiring_checked"):
+        # legacy entry without timestamp — treat as fresh (matches old behavior)
         return bool(cached.get("hiring_signals", []))
 
     biz_name_lower = biz_name.lower()
@@ -1039,6 +1058,7 @@ def search_hiring_signals(biz_name, cache_key, cache):
     biz_entry = cache.setdefault("businesses", {}).setdefault(cache_key, {})
     biz_entry["hiring_signals"] = hiring_results[:5]
     biz_entry["hiring_checked"] = True
+    biz_entry["hiring_checked_at"] = datetime.now(timezone.utc).isoformat()  # SGW-939 freshness
     biz_entry["hiring_role_match"] = role_match
     return hiring_found
 
@@ -1050,9 +1070,19 @@ def search_review_signals(biz_name, cache_key, cache):
     Respects 6-second rate limiting."""
     if not biz_name or len(biz_name) < 3:
         return False
-    # Check cache first — don't re-search within 3 days
+    # Check cache first — don't re-search within the freshness window
     cached = cache.get("businesses", {}).get(cache_key, {})
-    if cached.get("review_checked"):
+    # SGW-939: freshness — a check older than SIGNAL_RECHECK_DAYS is re-run
+    _checked_at = cached.get("review_checked_at")
+    if cached.get("review_checked") and _checked_at:
+        try:
+            _age = (datetime.now(timezone.utc) - datetime.fromisoformat(_checked_at)).days
+        except ValueError:
+            _age = 0
+        if _age <= SIGNAL_RECHECK_DAYS:
+            return bool(cached.get("review_signals", []))
+    elif cached.get("review_checked"):
+        # legacy entry without timestamp — treat as fresh (matches old behavior)
         return bool(cached.get("review_signals", []))
     
     review_results = []
@@ -1092,6 +1122,7 @@ def search_review_signals(biz_name, cache_key, cache):
     cache["businesses"][cache_key]["review_signals"] = review_results[:5]
     cache["businesses"][cache_key]["review_negative"] = negative_found
     cache["businesses"][cache_key]["review_checked"] = True
+    cache["businesses"][cache_key]["review_checked_at"] = datetime.now(timezone.utc).isoformat()  # SGW-939 freshness
     return negative_found
 
 
@@ -1480,6 +1511,58 @@ def _test_qualify_lead():
         "B2 fail: yelp not blocked in is_aggregator"
     assert is_aggregator("Some Listing", "https://www.yelpcdn.com/x") is True, \
         "B2 fail: yelpcdn (explicitly blocklisted) not blocked by boundary rule"
+
+    # ── SGW-939: signal coverage sweep + report ──
+    _now = datetime.now(timezone.utc).isoformat()
+    _old = (datetime.now(timezone.utc) - timedelta(days=30)).isoformat()
+    _sweep_cache = {"businesses": {
+        "fresh": {"name": "Fresh Co", "trade": "Accounting",
+                  "phones": ["(951) 555-0101"], "own_domains": ["fresh.com"],
+                  "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                  "hiring_checked": True, "hiring_checked_at": _now,
+                  "review_checked": True, "review_checked_at": _now,
+                  "lead_score": {"score": 50, "tier": "Warm"}},
+        "never": {"name": "Never Co", "trade": "Accounting",
+                  "phones": ["(951) 555-0102"], "own_domains": ["never.com"],
+                  "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                  "lead_score": {"score": 60, "tier": "Warm"}},
+        "stale": {"name": "Stale Co", "trade": "Accounting",
+                  "phones": ["(951) 555-0103"], "own_domains": ["stale.com"],
+                  "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                  "hiring_checked": True, "hiring_checked_at": _old,
+                  "review_checked": True, "review_checked_at": _old,
+                  "lead_score": {"score": 40, "tier": "Cold"}},
+        "nosq": {"name": "No SQ Co", "trade": "Accounting",
+                 "phones": ["(951) 555-0104"], "own_domains": ["nosq.com"],
+                 "lead_score": {"score": 99, "tier": "Warm"}},
+    }, "signals": [], "fb_groups": []}
+    _cands = signal_sweep_candidates(_sweep_cache)
+    _names = [c[2] for c in _cands]
+    assert _names == ["never", "stale"], f"939 fail: sweep priority wrong ({_names})"
+    assert "nosq" not in _names, "939 fail: no-site_quality record must not be eligible"
+    assert "fresh" not in _names, "939 fail: fresh-on-both record must not be eligible"
+    # partial (one checked, one not) → priority 1 (after never-never, before stale)
+    _sweep_cache["businesses"]["partial"] = {
+        "name": "Partial Co", "trade": "Accounting",
+        "phones": ["(951) 555-0105"], "own_domains": ["partial.com"],
+        "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+        "hiring_checked": True, "hiring_checked_at": _now,
+        "lead_score": {"score": 55, "tier": "Warm"}}
+    _cands2 = signal_sweep_candidates(_sweep_cache)
+    _prios = [(c[2], c[0]) for c in _cands2]
+    assert _prios == [("never", 0), ("partial", 1), ("stale", 2)], f"939 fail: sweep tiers ({_prios})"
+    # coverage math
+    _cov = generate_coverage_report(_sweep_cache, out_path="/tmp/sgw939-cov-test.json")
+    assert _cov["eligible"] == 4, f"939 fail: eligible count {_cov['eligible']}"
+    assert _cov["fresh_both"] == 1, f"939 fail: fresh_both {_cov['fresh_both']}"
+    assert _cov["fresh_both_percent"] == 25, f"939 fail: pct {_cov['fresh_both_percent']}"
+    assert _cov["never_checked"] == 2, f"939 fail: never_checked {_cov['never_checked']}"  # never + partial
+    assert _cov["warm_eligible"] == 3 and _cov["warm_fresh"] == 1, \
+        f"939 fail: warm coverage {_cov['warm_eligible']}/{_cov['warm_fresh']}"
+    assert _signal_checked_recently(_sweep_cache["businesses"]["fresh"]) is True, \
+        "939 fail: fresh record misjudged"
+    assert _signal_checked_recently(_sweep_cache["businesses"]["stale"]) is False, \
+        "939 fail: stale record misjudged"
 
     print("qualify_lead self-check: all assertions passed")
 
@@ -2246,6 +2329,120 @@ def send_report(cache, zip_code, now, prev_run=None):
         print(f"HTML report written (hermes missing): {report_path}")
 
 
+# ── SGW-939: SIGNAL COVERAGE SWEEP + REPORT ────────────────────────────
+def _signal_checked_recently(biz):
+    """SGW-939: True when a business has FRESH (<= SIGNAL_RECHECK_DAYS) checks
+    for BOTH hiring and reviews. A check WITHOUT a timestamp is treated as
+    stale — we cannot verify when it happened, and the coverage report (which
+    requires *_checked_at) would otherwise show 0% forever for legacy entries
+    while the sweep never re-checks them. Re-checking stamps the timestamp."""
+    fresh = True
+    for key in ("hiring_checked_at", "review_checked_at"):
+        ts = biz.get(key)
+        if not ts:
+            return False  # never checked, or legacy checked without timestamp → needs re-check
+        try:
+            age = (datetime.now(timezone.utc) - datetime.fromisoformat(ts)).days
+        except ValueError:
+            return False
+        if age > SIGNAL_RECHECK_DAYS:
+            fresh = False
+    return fresh
+
+
+def signal_sweep_candidates(cache):
+    """SGW-939: eligible prospects that need a fresh signal check, in
+    processing priority order. Priority = needs-most-urgently first:
+    1) never checked, highest current score; 2) stale (recheck overdue).
+    Replaces the old 'top N by score only' selection which re-checked the
+    same high-scorers every run and starved the rest."""
+    candidates = []
+    for norm, biz in cache.get("businesses", {}).items():
+        sq = biz.get("site_quality")
+        # Only leads with a website check can carry signal evidence (T14 keeps
+        # 'unknown' sites eligible — they can ONLY be scored on external signals).
+        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
+            continue
+        if len(biz.get("name", "")) < 3:
+            continue
+        never_h = not biz.get("hiring_checked")
+        never_r = not biz.get("review_checked")
+        stale_h = _signal_checked_recently(biz) is False and not never_h
+        stale_r = _signal_checked_recently(biz) is False and not never_r
+        if never_h and never_r:
+            priority = 0
+        elif never_h or never_r:
+            priority = 1
+        elif stale_h or stale_r:
+            priority = 2
+        else:
+            continue  # fresh on both — nothing to do
+        score = biz.get("lead_score", {}).get("score", 0)
+        candidates.append((priority, -score, norm, biz))
+    candidates.sort(key=lambda x: (x[0], x[1]))
+    return candidates
+
+
+def generate_coverage_report(cache, out_path=None):
+    """SGW-939: deterministic coverage report — what percentage of eligible
+    prospects has fresh hiring/review evidence, and what's still missing.
+    Written to SIGNAL_COVERAGE_REPORT (or out_path when a run happens before
+    the crawl/save completes). Pure cache read; no network. Returns the dict."""
+    report_path = Path(os.path.expanduser(out_path or SIGNAL_COVERAGE_REPORT))
+    bizs = cache.get("businesses", {})
+    total = len(bizs)
+    eligible = 0
+    fresh_both = 0
+    never_checked = 0
+    by_collector = {"hiring": 0, "review": 0}
+    warm_eligible = 0
+    warm_fresh = 0
+    for biz in bizs.values():
+        sq = biz.get("site_quality")
+        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
+            continue
+        if len(biz.get("name", "")) < 3:
+            continue
+        eligible += 1
+        h = biz.get("hiring_checked") and biz.get("hiring_checked_at") and \
+            (datetime.now(timezone.utc) - datetime.fromisoformat(biz["hiring_checked_at"])).days <= SIGNAL_RECHECK_DAYS
+        r = biz.get("review_checked") and biz.get("review_checked_at") and \
+            (datetime.now(timezone.utc) - datetime.fromisoformat(biz["review_checked_at"])).days <= SIGNAL_RECHECK_DAYS
+        if not biz.get("hiring_checked") or not biz.get("review_checked"):
+            never_checked += 1
+        if h:
+            by_collector["hiring"] += 1
+        if r:
+            by_collector["review"] += 1
+        if h and r:
+            fresh_both += 1
+        if (biz.get("lead_score") or {}).get("tier") in ("Warm", "Hot"):
+            warm_eligible += 1
+            if h and r:
+                warm_fresh += 1
+    pct_both = (fresh_both * 100 // eligible) if eligible else 0
+    report = {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "target_percent": SIGNAL_COVERAGE_TARGET,
+        "businesses_total": total,
+        "eligible": eligible,
+        "fresh_both": fresh_both,
+        "fresh_both_percent": pct_both,
+        "by_collector": by_collector,
+        "never_checked": never_checked,
+        "warm_eligible": warm_eligible,
+        "warm_fresh": warm_fresh,
+    }
+    try:
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(report_path, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+    except OSError as e:
+        log(f"coverage report write failed: {e}")
+    log(f"coverage: {fresh_both}/{eligible} eligible ({pct_both}%) fresh on both — target {SIGNAL_COVERAGE_TARGET}%")
+    return report
+
+
 def main():
     parser = argparse.ArgumentParser(description="92562 Local Business Scout v8")
     parser.add_argument("--zip", default="92562")
@@ -2260,6 +2457,10 @@ def main():
     parser.add_argument("--self-check", action="store_true",
                         help="SGW-938 B6: run the scoring/identity self-test and exit "
                              "(no crawl, no network). Exit code 0 = all assertions pass.")
+    parser.add_argument("--coverage", action="store_true",
+                        help="SGW-939: write the signal-coverage report from cache and exit "
+                             "(no crawl, no network). Shows what %% of eligible prospects "
+                             "have fresh hiring/review evidence.")
     parser.add_argument("--disable-collector", action="append", default=[],
                         help="Disable a collector by name (crawl_search, website_check, "
                              "hiring_signals, review_signals, buying_signals). Repeatable. "
@@ -2270,6 +2471,13 @@ def main():
     # is now a supported entry point for the repo verification command.
     if args.self_check:
         _test_qualify_lead()
+        sys.exit(0)
+
+    # SGW-939: coverage report from cache only — no crawl, no network.
+    if args.coverage:
+        cache = load_cache()
+        report = generate_coverage_report(cache)
+        print(f"Coverage report: {json.dumps(report, indent=2)}")
         sys.exit(0)
 
     # SGW-863: config-gated collectors — disable at runtime via CLI
@@ -2423,27 +2631,19 @@ def main():
 
     log(f"Websites checked: {checks_done}")
 
-    # ── PHASE 2: HIRING + REVIEW SIGNALS for top-scored leads ──
-    # Only run signal searches for leads that already have a website check (sq present)
-    # and haven't been checked yet. Limit to top 8 leads per run to respect rate limits.
-    scored_leads = []
-    for norm, biz in cache["businesses"].items():
-        sq = biz.get("site_quality")
-        # T14: include "unknown" (unreachable) — those leads can ONLY be scored on
-        # external signals, so they need the hiring/review search the most.
-        if not sq or sq.get("status") not in ("up", "blocked", "down", "unknown"):
-            continue
-        if biz.get("hiring_checked") and biz.get("review_checked"):
-            continue  # Already checked both
-        score = biz.get("lead_score", {}).get("score", 0)
-        scored_leads.append((score, norm, biz))
-    # Sort by score descending, take top 8
-    scored_leads.sort(key=lambda x: x[0], reverse=True)
+    # ── PHASE 2: HIRING + REVIEW SIGNALS — bounded coverage sweep (SGW-939) ──
+    # Replaces the old "top 8 by score, every run" loop which re-checked the
+    # same high-scorers and starved never-checked prospects. Now: process up to
+    # SIGNAL_SWEEP_LIMIT eligible candidates per run, prioritizing never-checked
+    # (highest score first), then stale (recheck overdue). A backfill over a few
+    # runs reaches every eligible prospect. Per-run request budget unchanged
+    # (~2 queries per signal × 6s delay ≈ 3–4 min worst case).
+    candidates = signal_sweep_candidates(cache)
+    log(f"Signal sweep: {len(candidates)} candidates need fresh checks "
+        f"(processing up to {SIGNAL_SWEEP_LIMIT} this run)")
     signal_checks = 0
-    max_signal_checks = 8  # 8 leads × up to 3 queries × 6s delay ≈ 2.5 min max
-
-    for score, norm, biz in scored_leads:
-        if signal_checks >= max_signal_checks:
+    for _prio, _neg_score, norm, biz in candidates[:SIGNAL_SWEEP_LIMIT]:
+        if signal_checks >= SIGNAL_SWEEP_LIMIT:
             break
         biz_name = biz.get("name", "")
         if not biz.get("hiring_checked") and len(biz_name) >= 3:
@@ -2451,7 +2651,7 @@ def main():
             run_collector("hiring_signals", search_hiring_signals, biz_name, norm, cache)
             signal_checks += 1
             time.sleep(6)
-        if signal_checks >= max_signal_checks:
+        if signal_checks >= SIGNAL_SWEEP_LIMIT:
             break
         if not biz.get("review_checked") and len(biz_name) >= 3:
             log(f"  Review signals: {biz_name}")
@@ -2517,6 +2717,13 @@ def main():
     if args.backup:
         backup_path = backup_cache(cache)
         log(f"Cache backed up to {backup_path}")
+
+    # SGW-939: post-run coverage snapshot — always written so the deterministic
+    # coverage trend is queryable without a separate invocation.
+    try:
+        generate_coverage_report(cache)
+    except Exception as e:  # noqa: BLE001 — reporting must never kill the run
+        log(f"coverage report failed: {e}")
 
     log(f"Cache: {len(cache['businesses'])} businesses, {len(cache.get('signals', []))} signals, {len(cache.get('fb_groups', []))} groups")
     log(f"Queries: {searx_ok} ok / {searx_empty} empty")
