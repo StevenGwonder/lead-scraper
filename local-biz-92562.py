@@ -14,6 +14,7 @@ import shutil
 import ssl
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import urllib.parse
@@ -25,6 +26,14 @@ from pathlib import Path
 SEARXNG = "http://localhost:8888/search"
 CACHE_FILE = Path(os.path.expanduser("~/.hermes/scripts/local-biz-cache.json"))
 REPORT_DIR = Path(os.path.expanduser("~/.hermes/scripts/reports"))
+
+# SGW-938 B4: single owner for report delivery. The cron job
+# (92562-local-biz-briefing, no-agent mode) delivers the script's stdout as a
+# text line (the script deliberately does not emit MEDIA: on stdout); the
+# actual HTML file attachment is sent HERE via `hermes send`, which DOES
+# process MEDIA: tags. Keep this one target — the README previously claimed a
+# different chat (-5131689526) which was stale.
+REPORT_TARGET = "telegram:-1003913783231:11"
 
 # ── NOT REAL BUSINESSES ──
 AGGREGATOR_DOMAINS = {
@@ -189,6 +198,17 @@ def _distinctive_name_tokens(name):
             out.append(w)
     return out
 
+def _is_aggregator_domain(domain):
+    """SGW-938 B2: canonical aggregator-domain check — domain-BOUNDARY match.
+
+    `domain == agg or domain.endswith('.' + agg)` — NOT substring. Substring
+    matching makes 'lawyers.com' block 'prfamilylawyers.com' (a real firm).
+    Used by BOTH is_aggregator() and the crawl loop's is_own_site check so
+    ingestion and filtering agree."""
+    d = (domain or "").lower().rstrip(".")
+    return any(d == agg or d.endswith("." + agg) for agg in AGGREGATOR_DOMAINS)
+
+
 def _is_directory_record(url, name=""):
     """SGW-864: True when a record is a directory/SEO listing, not a business.
     Checks domain blocklist, STRONG path signatures (listing pages), and
@@ -196,9 +216,8 @@ def _is_directory_record(url, name=""):
     generic — a real brand on its own /service-area/ page stays a lead."""
     url_l = (url or "").lower()
     domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0]
-    # Domain-boundary match, NOT substring: "lawyers.com" must not match
-    # "prfamilylawyers.com" (a real firm). Exact domain or subdomain-of.
-    if any(domain == agg or domain.endswith("." + agg) for agg in AGGREGATOR_DOMAINS):
+    # SGW-938 B2: one canonical boundary rule for domain blocklists
+    if _is_aggregator_domain(domain):
         return True
     if any(re.search(p, url_l) for p in DIRECTORY_PATH_PATTERNS_STRONG):
         return True
@@ -455,15 +474,36 @@ def collector_enabled(name):
 
 def run_collector(name, fn, *args, **kwargs):
     """Run a collector with its configured timeout; on any failure return
-    None and log — never let one source's error crash the run (SGW-863)."""
+    None and log — never let one source's error crash the run (SGW-863).
+
+    SGW-938 B5: timeout_s is now ENFORCED (was declared metadata only) via a
+    daemon watchdog thread — a hung collector can no longer stall the run
+    forever. The worker thread keeps running in the background if it doesn't
+    notice the timeout, so a wedged DNS socket won't hold the process open."""
     if not collector_enabled(name):
         log(f"collector disabled: {name}")
         return None
-    try:
-        return fn(*args, **kwargs)
-    except Exception as e:  # noqa: BLE001 — isolation is the point
-        log(f"collector failed ({name}): {e}")
+    timeout_s = COLLECTORS.get(name, {}).get("timeout_s", 120)
+    result = {}
+    worker_done = threading.Event()
+
+    def _worker():
+        try:
+            result["value"] = fn(*args, **kwargs)
+        except Exception as e:  # noqa: BLE001 — isolation is the point
+            result["error"] = e
+        finally:
+            worker_done.set()
+
+    t = threading.Thread(target=_worker, name=f"collector-{name}", daemon=True)
+    t.start()
+    if not worker_done.wait(timeout_s):
+        log(f"collector timed out after {timeout_s}s: {name}")
         return None
+    if "error" in result:
+        log(f"collector failed ({name}): {result['error']}")
+        return None
+    return result.get("value")
 
 
 def log(msg):
@@ -567,7 +607,8 @@ def clean_name(title):
 def is_aggregator(title, url):
     """Check if result is aggregator/list, not a real business."""
     domain = re.sub(r'https?://(www\.)?', '', url.lower()).split('/')[0]
-    if any(agg in domain for agg in AGGREGATOR_DOMAINS):
+    # SGW-938 B2: boundary match via the shared canonical helper, not substring
+    if _is_aggregator_domain(domain):
         return True
     for pattern in AGGREGATOR_TITLE_PATTERNS:
         if re.search(pattern, title, re.I):
@@ -577,30 +618,41 @@ def is_aggregator(title, url):
     return False
 
 
+def _normalize_phone(raw):
+    """SGW-938 B1: canonical NANP phone validator/normalizer.
+
+    Every phone ingestion path (regex extract, tel: href, JSON-LD merge,
+    cache sweep) MUST route through this one function. Returns the
+    normalized '(XXX) XXX-XXXX' form for a valid US number, else None.
+    Rules: 10 digits (or 11 starting with '1'); area code 200-989 and not
+    N11 (411/911); exchange not all-zero (000) and not reserved test (555)."""
+    if not raw:
+        return None
+    digits = re.sub(r"\D", "", str(raw))
+    if len(digits) == 11 and digits.startswith("1"):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return None
+    ac = int(digits[:3])
+    exchange = int(digits[3:6])
+    if not (200 <= ac <= 989 and ac % 100 != 11) or exchange in (0, 555):
+        return None
+    return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+
+
 def extract_phones(text):
     """Extract US phone numbers. Fix 6: broader regex for more formats.
-    Research 2026-08: NANP validation — area code must be real (200-989, not
-    starting with 0/1), exchange must not be all-zeros or a reserved test prefix
-    (555). Crawler garbage like (100) 091-4084 or (178) 137-3717 must not count
-    as a contact path."""
+    Research 2026-08 / SGW-938 B1: NANP validation via _normalize_phone —
+    area code must be real (200-989, not starting with 0/1), exchange must
+    not be all-zeros or a reserved test prefix (555). Crawler garbage like
+    (100) 091-4084 or (178) 137-3717 must not count as a contact path."""
     # Match: (951) 225-1131, 951-225-1131, 951.225.1131, 951 225 1131, 9512251131
-    phones = re.findall(r'\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}', text)
+    phones = re.findall(r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}", text)
     seen, result = set(), []
     for p in phones:
-        digits = re.sub(r'\D', '', p)
-        # Must be 10 digits (US) or 11 starting with 1
-        if len(digits) == 11 and digits.startswith('1'):
-            digits = digits[1:]
-        if digits not in seen and len(digits) == 10:
-            ac = int(digits[:3])
-            exchange = int(digits[3:6])
-            # NANP: area code 200-989 (not 0/1 start, not N11 like 411/911),
-            # exchange not all-zero (000) and not reserved test (555)
-            if not (200 <= ac <= 989 and ac % 100 != 11) or exchange in (0, 555):
-                continue
-            seen.add(digits)
-            # Normalize format: (XXX) XXX-XXXX
-            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
+        formatted = _normalize_phone(p)
+        if formatted and formatted not in seen:
+            seen.add(formatted)
             result.append(formatted)
     return result[:3]
 
@@ -897,12 +949,13 @@ def check_website(domain):
     website_score = sum([has_viewport, has_tel, has_contact, words > 200, has_booking_system or has_chat])
 
     page_phones = extract_phones(combined)
-    for tm in re.findall(r'href=["\']tel:([+\d\s()\-\.]+)', combined, re.I):
-        digits = re.sub(r'\D', '', tm)
-        if len(digits) == 10:
-            formatted = f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
-            if formatted not in page_phones:
-                page_phones.append(formatted)
+    for tm in re.findall(r'href=["\']tel:([+\d\s()\-.]+)', combined, re.I):
+        # SGW-938 B1: tel: hrefs go through the SAME canonical validator —
+        # previously any 10-digit string was accepted, bypassing NANP rules
+        # and letting garbage like (100) 091-4084 count as a contact path.
+        formatted = _normalize_phone(tm)
+        if formatted and formatted not in page_phones:
+            page_phones.append(formatted)
     # T16: JSON-LD telephone is authoritative — normalize and merge
     for t in jl["phones"]:
         for formatted in extract_phones(t):
@@ -1382,6 +1435,52 @@ def _test_qualify_lead():
     assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
     p2 = pitch_for({"trade": "Law Office"})
     assert "billable" in p2, f"research fail: admin pitch not outcome-first ({p2})"
+
+    # ── SGW-938 B1: canonical phone validator — every ingestion path agrees ──
+    # tel: href path must reject what extract_phones rejects
+    assert _normalize_phone("tel:(100) 091-4084") is None, "B1 fail: tel: bad area code accepted"
+    assert _normalize_phone("tel:(007) 780-0750") is None, "B1 fail: tel: 007 area code accepted"
+    assert _normalize_phone("tel:(178) 137-3717") is None, "B1 fail: tel: 178 area code accepted"
+    assert _normalize_phone("tel:(951) 555-1234") is None, "B1 fail: tel: 555 exchange accepted"
+    assert _normalize_phone("tel:(951) 225-1131") == "(951) 225-1131", "B1 fail: tel: valid number rejected"
+    assert _normalize_phone("(951) 225-1131") == "(951) 225-1131", "B1 fail: valid formatted number rejected"
+    assert _normalize_phone("+1 (951) 225-1131") == "(951) 225-1131", "B1 fail: +1 country code rejected"
+    assert _normalize_phone("9512251131") == "(951) 225-1131", "B1 fail: bare digits rejected"
+    assert _normalize_phone("(951) 225-113") is None, "B1 fail: 9-digit number accepted"
+    assert _normalize_phone("411") is None, "B1 fail: short garbage accepted"
+    # cache sweep: contaminated records must be purged on load
+    test_cache = {"businesses": {
+        "b1": {"phones": ["(951) 225-1131", "(100) 091-4084"], "own_domains": ["x.com"],
+               "name": "Real Co", "last_seen": "2099-01-01T00:00:00+00:00"},
+    }, "signals": [], "fb_groups": []}
+    import tempfile
+    import pathlib as _pl
+    with tempfile.TemporaryDirectory() as _td:
+        _orig_cache = CACHE_FILE
+        _tmp_cache = _pl.Path(_td) / "cache.json"
+        import copy
+        _c = copy.deepcopy(test_cache)
+        _tmp_cache.write_text(json.dumps(_c), encoding="utf-8")
+        try:
+            globals()["CACHE_FILE"] = _tmp_cache
+            _loaded = load_cache()
+            assert _loaded["businesses"]["b1"]["phones"] == ["(951) 225-1131"], \
+                f"B1 fail: cache sweep kept contaminated phone {_loaded['businesses']['b1']['phones']}"
+        finally:
+            globals()["CACHE_FILE"] = _orig_cache
+
+    # ── SGW-938 B2: domain-boundary aggregator matching ──
+    assert _is_aggregator_domain("lawyers.com") is True, "B2 fail: exact aggregator domain not blocked"
+    assert _is_aggregator_domain("www.lawyers.com") is True, "B2 fail: subdomain not blocked"
+    assert _is_aggregator_domain("prfamilylawyers.com") is False, "B2 fail: containing-domain real firm dropped"
+    assert _is_aggregator_domain("myattorneys.agency.yelp.com") is True, "B2 fail: deep subdomain not blocked"
+    assert is_aggregator("PrFamily Lawyers", "https://prfamilylawyers.com") is False, \
+        "B2 fail: is_aggregator still drops containing-domain real firm"
+    assert is_aggregator("Some Listing", "https://www.yelp.com/biz/x") is True, \
+        "B2 fail: yelp not blocked in is_aggregator"
+    assert is_aggregator("Some Listing", "https://www.yelpcdn.com/x") is True, \
+        "B2 fail: yelpcdn (explicitly blocklisted) not blocked by boundary rule"
+
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -1426,6 +1525,20 @@ def load_cache():
                     brand = _domain_brand_name(biz["own_domains"][0])
                     if brand:
                         biz["name"] = brand
+            # SGW-938 B1: purge cached phone evidence that fails the canonical
+            # NANP validator — contaminated tel:/JSON-LD values ingested before
+            # the validator fix must not keep inflating contactability.
+            # Also scrub the same garbage from site_quality.phones (the other
+            # place phones are stored).
+            for biz in cache["businesses"].values():
+                cleaned = [p for p in (biz.get("phones") or []) if _normalize_phone(p)]
+                if len(cleaned) != len(biz.get("phones") or []):
+                    biz["phones"] = cleaned
+                sq = biz.get("site_quality")
+                if sq and sq.get("phones"):
+                    cleaned_sq = [p for p in sq["phones"] if _normalize_phone(p)]
+                    if len(cleaned_sq) != len(sq["phones"]):
+                        sq["phones"] = cleaned_sq
             # Prune stale signals/fb_groups (no date field → keep to be safe)
             cache["signals"] = [s for s in cache.get("signals", []) if s.get("date", "z") > cutoff_sig]
             cache["fb_groups"] = [g for g in cache.get("fb_groups", []) if g.get("date", "z") > cutoff_sig]
@@ -1438,7 +1551,9 @@ def load_cache():
 def save_cache(cache):
     """Save the business cache to disk."""
     CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(CACHE_FILE, "w") as f:
+    # SGW-938 B3: explicit UTF-8 — matches backup_cache(); non-UTF-8 locale
+    # defaults would otherwise throw on non-ASCII cache content.
+    with open(CACHE_FILE, "w", encoding="utf-8") as f:
         json.dump(cache, f, indent=2)
 
 
@@ -2116,10 +2231,19 @@ def send_report(cache, zip_code, now, prev_run=None):
     _h = shutil.which("hermes") or os.path.expanduser("~/.local/bin/hermes")
     hermes = _h if os.path.isfile(_h) else None
     if hermes:
-        subprocess.run([hermes, "send", "-t", "telegram:-1003913783231:11",
+        # SGW-938 B4: single REPORT_TARGET; check the subprocess return code
+        # instead of printing "sent" regardless. A failing send is a real error.
+        res = subprocess.run([hermes, "send", "-t", REPORT_TARGET,
             f"Lead Scout Report — {now.strftime('%b %d, %H:%M')} PT\nMEDIA:{report_path}"],
-            timeout=30)
-    print(f"HTML report sent: {report_path}")
+            timeout=30, capture_output=True, text=True)
+        if res.returncode != 0:
+            log(f"WARNING: hermes send failed (rc={res.returncode}): {res.stderr.strip()[:200]}")
+            print(f"HTML report written (delivery failed): {report_path}")
+            return
+        print(f"HTML report sent: {report_path}")
+    else:
+        log("hermes binary not found — report written but not delivered")
+        print(f"HTML report written (hermes missing): {report_path}")
 
 
 def main():
@@ -2133,11 +2257,20 @@ def main():
     parser.add_argument("--briefing", action="store_true", help="Just print the briefing from cache (no crawl)")
     parser.add_argument("--html", action="store_true", help="Generate HTML report instead of text")
     parser.add_argument("--backup", action="store_true", help="Write a timestamped cache backup")
+    parser.add_argument("--self-check", action="store_true",
+                        help="SGW-938 B6: run the scoring/identity self-test and exit "
+                             "(no crawl, no network). Exit code 0 = all assertions pass.")
     parser.add_argument("--disable-collector", action="append", default=[],
                         help="Disable a collector by name (crawl_search, website_check, "
                              "hiring_signals, review_signals, buying_signals). Repeatable. "
                              "SGW-863: proves disabling a source doesn't break the run.")
     args = parser.parse_args()
+
+    # SGW-938 B6: self-check mode — the previously-dead _test_qualify_lead()
+    # is now a supported entry point for the repo verification command.
+    if args.self_check:
+        _test_qualify_lead()
+        sys.exit(0)
 
     # SGW-863: config-gated collectors — disable at runtime via CLI
     for cname in args.disable_collector:
@@ -2213,7 +2346,9 @@ def main():
 
                 phones = extract_phones(title + " " + snippet)
                 domain = re.sub(r'https?://(www\.)?', '', url.lower()).split('/')[0]
-                is_own_site = not any(agg in domain for agg in AGGREGATOR_DOMAINS)
+                # SGW-938 B2: boundary match, not substring — 'prfamilylawyers.com'
+                # must be treated as its own domain, not an aggregator echo.
+                is_own_site = not _is_aggregator_domain(domain)
 
                 # Fix 2: dedup by domain — find existing entry with same domain
                 existing_norm = None

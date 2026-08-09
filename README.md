@@ -75,10 +75,15 @@ python3 local-biz-92562.py --group 0 --html
 job_id: 4b49f990a0cf
 name: 92562-local-biz-briefing
 schedule: "0 6,14,22 * * 1-5"  # 6AM, 2PM, 10PM PT weekdays
-deliver: telegram:-5131689526
+deliver: telegram:-1003913783231:11
 no_agent: true
 script: local-biz-92562.py
 ```
+
+Delivery: the cron job's stdout is delivered as a text line (the script
+deliberately emits no MEDIA: tag on stdout); the HTML file attachment is sent
+by the script itself via `hermes send` to the same target (`REPORT_TARGET` in
+`local-biz-92562.py`). One target, one file-delivery owner.
 
 ## Tech Stack
 
