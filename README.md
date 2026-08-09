@@ -2,7 +2,13 @@
 
 Local business lead generation pipeline for North Web Pro. Scrapes SearXNG for businesses in a target ZIP code, audits their websites, and scores **buying readiness** — not website quality.
 
-North Web Pro sells **custom AI agents on retainer** that remove manual operational drag (phone answering, scheduling, intake, follow-up, data entry). The pipeline ranks businesses by how likely they are to buy that, not by how easy they were to crawl.
+North Web Pro **diagnoses and removes operational drag** — the manual work that
+slows a business down (phone answering, scheduling, intake, follow-up, data
+entry). The fix may be a process change, better use of existing software, an
+integration, automation, custom software, or AI — the implementation tool is
+chosen **after** the diagnosis. The pipeline ranks businesses by how much
+operational drag they carry and how likely they are to act, not by how easy
+they were to crawl.
 
 ## What It Does
 

@@ -1378,7 +1378,7 @@ def qualify_lead(biz, sq):
 
     # ── SGW-866: DIMENSION MODEL ──────────────────────────────────────
     # Separate WHY a prospect matters instead of one blended number:
-    #   fit         — lane fit for a digital-worker retainer (0-10)
+    #   fit         — lane fit for operational-drag removal (0-10)
     #   pain        — named, corroborated operational pain (0-10)
     #   capacity    — ability/willingness to pay (hiring, size, budget proxy) (0-10)
     #   actionability — can we reach them + evidence confidence (0-10)
@@ -1588,6 +1588,18 @@ def _test_qualify_lead():
     assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
     p2 = pitch_for({"trade": "Law Office"})
     assert "billable" in p2, f"research fail: admin pitch not outcome-first ({p2})"
+    # SGW-928: pitch sells the OUTCOME, never the tool (diagnosis-first; the
+    # implementation — process, software, or AI — is chosen after the audit).
+    # A business with no AI-specific evidence must get a tool-agnostic pitch.
+    for no_ai_biz, expect in (
+        ({"trade": "Accounting", "site_quality": {"automation_gaps": ["no booking system"]}}, "intake"),
+        ({"trade": "Plumbing", "site_quality": {"automation_gaps": ["no booking system"]}}, "missed revenue"),
+        ({"trade": "Plumbing"}, "missed"),
+    ):
+        pb = pitch_for(no_ai_biz)
+        assert expect in pb, f"SGW-928 fail: pitch lost outcome ({pb})"
+        for banned in ("digital worker", "AI agent", "autopilot", "hold music"):
+            assert banned not in pb, f"SGW-928 fail: pitch leads with tool ({pb})"
 
     # ── SGW-938 B1: canonical phone validator — every ingestion path agrees ──
     # tel: href path must reject what extract_phones rejects
@@ -2237,23 +2249,24 @@ details summary:hover { color: var(--blue); }
 
 
 def pitch_for(biz):
-    """T9 + research 2026-08: Derive an OUTCOME-first pitch line (research:
-    'businesses don't buy AI calls, they buy outcomes').
-    ponytail: priority table, first match wins."""
+    """T9 + research 2026-08 + SGW-928: Derive an OUTCOME-first pitch line.
+    Sells the removal of operational drag, never the tool — the implementation
+    (process change, existing software, automation, AI) is chosen AFTER
+    diagnosis. ponytail: priority table, first match wins."""
     trade = biz.get("trade", "")
     if biz.get("review_negative"):
         return "never miss another intake call — customers say you're slow to respond, we fix that"
     if biz.get("hiring_role_match"):
-        return "skip the hire — a digital worker does the role you're posting for, without the salary"
+        return "the role you're hiring for is eating your margins — we take that workload off your plate"
     if trade in ADMIN_TRADES:
-        return "intake, scheduling & follow-up on autopilot — frees your staff for billable work"
+        return "stop letting intake fall through the cracks — your staff gets their time back for billable work"
     if biz.get("hiring_signals"):
-        return "automate the workload behind the job you're hiring for — before you pay the posting"
+        return "the workload behind that job posting is the real cost — we remove it before you pay the salary"
     sq = biz.get("site_quality") or {}
     gaps = sq.get("automation_gaps", [])
     if any(g in gaps for g in ("no booking system", "no booking/chat system")):
-        return "book every call that hits voicemail — automated booking + reminders, no more missed revenue"
-    return "digital worker for intake, scheduling & follow-up — no more hold music"
+        return "book every call that hits voicemail — no more missed revenue"
+    return "every missed call is a missed job — we fix your intake so nothing falls through"
 
 
 def lead_score_badge(tier, score):
@@ -2532,8 +2545,8 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
 <div class="footer">
     <div class="pitch">
         <strong>Pitch:</strong> "You're growing, you're busy, and leads are slipping through.
-        I install a digital employee that answers calls, books jobs, and follows up — 24/7.
-        It knows your business and gets better every week. 48hr setup."
+        We fix the intake — every call answered, every job booked, follow-up handled.
+        We start with a 48hr assessment and only bring in tooling once we know the fix."
     </div>
     <p>{total_targets} qualified leads from {len(businesses)} businesses scanned</p>
     <p><a href="https://northwebpro.com">northwebpro.com</a></p>
