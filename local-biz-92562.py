@@ -709,8 +709,11 @@ def places_identity(biz_name, trade="", zip_hint="92562"):
 
     Returns a dict with provider/source + observed_at + confidence + state +
     provenance, or None when the key is absent / lookup fails / no match.
-    Missing fields are omitted (caller stores UNKNOWN). Never raises: any
-    failure → None (run_collector also guards, this is belt and braces).
+    Missing fields are omitted (caller stores UNKNOWN). Network errors are
+    NOT caught here — production callers MUST go through run_collector(),
+    which isolates and times out every collector (QC 2026-08-09: the
+    docstring used to claim 'never raises'; the run_collector wrapper is the
+    guarantee, and a direct call can raise URLError).
 
     Official-API terms: results shown to end users must include the "Powered
     by Google" attribution. This issue stores evidence only — no user-facing
@@ -1664,12 +1667,17 @@ def _ai_review_evidence_keys(biz):
     return sorted(keys)
 
 
-# Refs that make a 'priority' decision credible: verified website read,
+# Refs that make a 'priority' decision credible: a VERIFIED website read,
 # automation gaps, hiring/review evidence, provider corroboration. Identity
-# and score alone (name/trade/url/phones/lead_score) are never enough —
-# mirrors prompt rule 5 ('priority requires strong supporting evidence').
+# and score alone (name/trade/url/phones/lead_score) are never enough, and
+# site_quality is NOT substantive by itself — a record with
+# site_quality={'status':'unknown'} has no verified read, so it cannot
+# ground a priority (QC 2026-08-09: site_quality was in this set, letting a
+# fabricated priority citing ['name','site_quality'] survive on an
+# unknown-status record). site_status is only emitted when the check
+# actually ran (status up/blocked/down), which is the verified-read case.
 AI_REVIEW_SUBSTANTIVE_KEYS = frozenset({
-    "site_quality", "site_status", "automation_gaps", "hiring_evidence",
+    "site_status", "automation_gaps", "hiring_evidence",
     "review_evidence", "provider_evidence", "platform", "paper_signals",
 })
 
@@ -1811,6 +1819,11 @@ def _parse_ai_review(raw):
                 "recommended_first_offer": "", "email_draft": "",
                 "phone_opener": "", "missing_evidence": [],
                 "abstain_reason": "unparseable model output"}
+    # QC 2026-08-09: NaN confidence passes the isinstance check (it IS a
+    # float) and would render 'nan%' in the weekly brief. Normalize to 0.0 —
+    # NaN != NaN is the zero-import test.
+    if isinstance(parsed["confidence"], float) and parsed["confidence"] != parsed["confidence"]:
+        parsed["confidence"] = 0.0
     return parsed
 
 
@@ -2391,6 +2404,34 @@ def _test_qualify_lead():
             f"940 fail: wrong downgrade reason {_thin_rev['abstain_reason']}"
         assert "owner" not in _thin_rev["evidence_refs"], f"940 fail: unbacked ref survived {_thin_rev['evidence_refs']}"
         assert json.dumps(_thin, sort_keys=True) == _thin_before, "940 fail: ai_review_candidate mutated record"
+        # QC (2026-08-09): the fabricated-priority bypass — site_quality on an
+        # UNKNOWN-status record must NOT count as substantive evidence. A model
+        # citing ['name','site_quality'] with fabricated prose (owner name,
+        # 'AI agent' tool claim) must be downgraded to abstain.
+        _unv = {"name": "Unv Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                "lead_score": {"score": 30, "tier": "Cold"},
+                "site_quality": {"status": "unknown", "confidence": "low",
+                                 "automation_gaps": [], "website_score": -1}}
+        _unv_fab = json.dumps({
+            "decision": "priority", "confidence": 0.95,
+            "evidence_refs": ["name", "site_quality"],
+            "bottleneck_hypothesis": "hypothesis: owner Mike runs everything manually",
+            "why_now": "revenue $2M/yr and growing fast",
+            "recommended_first_offer": "AI agent to run their books",
+            "email_draft": "Hey Mike, your intake is broken",
+            "phone_opener": "Hi Mike", "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _unv_fab.decode()}}]}).encode())):
+            _unv_rev = ai_review_candidate(_unv)
+        assert _unv_rev["decision"] == "abstain", \
+            f"940/QC fail: site_quality(unknown) priority bypass survived ({_unv_rev['decision']})"
+        assert "fabrication guard" in _unv_rev["abstain_reason"], \
+            f"940/QC fail: wrong bypass downgrade reason {_unv_rev['abstain_reason']}"
+        # NaN confidence must not survive parsing (would render 'nan%').
+        _nan = _parse_ai_review(json.dumps({"decision": "watch", "confidence": float("nan")}))
+        assert _nan["confidence"] == 0.0, f"940/QC fail: NaN confidence survived ({_nan['confidence']})"
         # A 'watch' with mixed refs: valid refs kept, unbacked refs stripped.
         _mixed = json.dumps({
             "decision": "watch", "confidence": 0.4,
