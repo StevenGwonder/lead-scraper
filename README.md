@@ -41,10 +41,19 @@ Every Hot/Warm card shows a **"Pitch this:"** line derived from the top signal, 
 ## Architecture
 
 - **Incremental crawler**: 6 query groups (A-F) rotate across runs. Each run does 3-4 queries with 6-second delays to respect SearXNG rate limits.
-- **Zero LLM tokens at runtime**: All Python, no AI. Runs via Hermes cron with `no_agent: true`. LLMs are only used by developers editing this code.
+- **Zero LLM tokens at runtime**: All Python, deterministic. Runs via Hermes cron with `no_agent: true`. The optional AI reviewer (SGW-940) is opt-in, advisory, and never required for a report.
 - **JSON cache**: `~/.hermes/scripts/local-biz-cache.json` — Hot/Warm leads kept 30 days, Cold 7 days; signals pruned after 14 days
 - **HTML reports**: Dark North Web Pro branded, written to `~/.hermes/scripts/reports/`
 - **pip allowed**: Install on Hermes before use; justify any new dep against what stdlib already does
+
+## AI review (SGW-940)
+
+Grounding rules: the deterministic pipeline and report are fully functional with AI **disabled** — the engine has zero LLM runtime dependence by default. `--ai-review` is an explicit opt-in second-pass pass over the top N eligible/research candidates (bounded, score-ordered).
+
+- Env: `AI_REVIEW_BASE_URL` (default `https://ollama.com/v1`, OpenAI-compatible `/chat/completions`), `AI_REVIEW_MODEL`, optional `AI_REVIEW_API_KEY`, `AI_REVIEW_MAX_CANDIDATES` (default 15), `AI_REVIEW_MAX_TOKENS`, `AI_REVIEW_TIMEOUT`. Unconfigured → log one line, skip, exit 0.
+- Output contract per prospect: `decision` (priority/research/watch/reject/abstain), `confidence`, `evidence_refs[]`, `bottleneck_hypothesis` (labeled), `why_now`, `recommended_first_offer`, `email_draft`, `phone_opener`, `missing_evidence[]`, `abstain_reason` — stored under `biz["ai_review"]` with model/provider/latency/tokens metadata.
+- Anti-fabrication: `evidence_refs` must map to evidence actually captured on the record; a `priority` verdict without substantive evidence (verified site read, automation gaps, hiring/review evidence, provider corroboration) is downgraded to abstain. The reviewer NEVER changes `lead_score` or `eligibility_state` — it is advisory only. No outbound writes.
+- Deployment host is not decided here (Tahoe pending its runtime audit); the module is host-agnostic stdlib.
 
 ## Eligibility gate (SGW-941)
 

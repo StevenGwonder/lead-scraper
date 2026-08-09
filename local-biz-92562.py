@@ -603,6 +603,24 @@ PLACES_FIELDS = ("formatted_address,name,place_id,website,"
 # broader match when the SearXNG-derived name is mangled. Unset = exact name+zip.
 PLACES_TEXT_SEARCH = os.getenv("PLACES_TEXT_SEARCH", "")
 
+# ── SGW-940: GROUNDED AI REVIEW (OPT-IN, DORMANT BY DEFAULT) ─────────────
+# Second-pass prospect reviewer: one OpenAI-compatible /v1/chat/completions
+# call (stdlib urllib only) that reads the DETERMINISTIC evidence bundle and
+# returns a grounded opinion stored under biz['ai_review']. Host-agnostic —
+# any OpenAI-compatible endpoint (local ollama today, Tahoe later). DISABLED
+# unless a model AND (base_url or api_key) are configured: zero runtime
+# effect, zero network, deterministic pipeline fully functional. AI output is
+# advisory and NEVER affects lead_score or eligibility (routing effects wait
+# for the SGW-861 human-verified benchmark evaluation).
+AI_REVIEW_BASE_URL = os.getenv("AI_REVIEW_BASE_URL", "")     # e.g. https://ollama.com/v1 — empty = disabled
+AI_REVIEW_MODEL = os.getenv("AI_REVIEW_MODEL", "")           # empty = disabled
+AI_REVIEW_API_KEY = os.getenv("AI_REVIEW_API_KEY", "")       # optional — local endpoints may need none
+AI_REVIEW_MAX_CANDIDATES = int(os.getenv("AI_REVIEW_MAX_CANDIDATES", "15"))
+AI_REVIEW_MAX_TOKENS = int(os.getenv("AI_REVIEW_MAX_TOKENS", "1200"))
+AI_REVIEW_TIMEOUT = int(os.getenv("AI_REVIEW_TIMEOUT", "60"))       # seconds per call
+AI_REVIEW_RECHECK_DAYS = int(os.getenv("AI_REVIEW_RECHECK_DAYS", "7"))  # freshness window
+AI_REVIEW_DECISIONS = ("priority", "research", "watch", "reject", "abstain")
+
 # ── SGW-863: COLLECTOR REGISTRY ──────────────────────────────────────────
 # Pluggable, config-gated collectors. Each entry: name, enabled, timeout_s.
 # run_collector() wraps every collector with per-source timeout + failure
@@ -1578,6 +1596,348 @@ def qualify_lead(biz, sq):
             "dimensions": dimensions, "evidence": evidence, "reasons": reasons}
 
 
+# ── SGW-940: GROUNDED AI REVIEW (SECOND-PASS PROSPECT REVIEWER) ──────────
+# Advisory only. Reads the deterministic evidence bundle, asks one
+# OpenAI-compatible endpoint (stdlib urllib), stores the grounded opinion
+# under biz['ai_review'] with model/provider/latency/tokens metadata. Never
+# writes anywhere, never touches lead_score/eligibility, disabled by default
+# (AI_REVIEW_MODEL empty → zero network, zero runtime effect).
+
+AI_REVIEW_CONTRACT = (
+    "decision",           # priority | research | watch | reject | abstain
+    "confidence",         # 0.0-1.0
+    "evidence_refs",      # list of evidence keys this review rests on
+    "bottleneck_hypothesis",  # MUST be explicitly labeled as hypothesis
+    "why_now",            # reason this prospect matters this quarter
+    "recommended_first_offer",  # diagnosis-first: process/software outcome,
+                                # implementation tool chosen AFTER diagnosis
+    "email_draft",        # short outreach email, no unsupported claims
+    "phone_opener",       # one-line phone opener
+    "missing_evidence",   # what would raise confidence
+    "abstain_reason",     # required when decision == abstain
+)
+
+
+def _ai_review_evidence_keys(biz):
+    """Stable keys for the deterministic evidence ACTUALLY captured on this
+    record. The anti-fabrication guard only accepts evidence_refs from this
+    set — the model can never cite 'owner', 'revenue', 'employees', etc.
+    because those fields are not captured deterministically. Keys are
+    conditional: a key the record lacks is not a legitimate ref (QC 2026-08-09:
+    the base list used to be unconditional, so 'url'/'phones'/'site_quality'
+    were valid refs even when the record had none of them — that let a
+    fabricated 'priority' on name alone survive the guard)."""
+    keys = ["name", "trade"]
+    if biz.get("url") or biz.get("own_domains"):
+        keys.append("url")
+    if biz.get("own_domains"):
+        keys.append("own_domains")
+    if biz.get("phones"):
+        keys.append("phones")
+        keys.append("phone_contact")
+    if biz.get("snippet"):
+        keys.append("snippet")
+    sq = biz.get("site_quality")
+    if isinstance(sq, dict) and sq:
+        keys.append("site_quality")
+    if isinstance(biz.get("lead_score"), dict) and biz.get("lead_score"):
+        keys.append("lead_score")
+    if biz.get("eligibility_state"):
+        keys.append("eligibility_state")
+    if biz.get("hiring_checked") or biz.get("hiring_signals"):
+        keys.append("hiring")
+        keys.append("hiring_evidence")
+    if biz.get("review_checked") or biz.get("review_signals"):
+        keys.append("reviews")
+        keys.append("review_evidence")
+    if biz.get("provider_evidence"):
+        keys.append("provider_evidence")
+    if isinstance(sq, dict):
+        if sq.get("status") not in (None, "unknown"):
+            keys.append("site_status")
+        if sq.get("automation_gaps"):
+            keys.append("automation_gaps")
+        if sq.get("has_outdated_email") or sq.get("has_fax"):
+            keys.append("paper_signals")
+        if sq.get("platform"):
+            keys.append("platform")
+    return sorted(keys)
+
+
+# Refs that make a 'priority' decision credible: verified website read,
+# automation gaps, hiring/review evidence, provider corroboration. Identity
+# and score alone (name/trade/url/phones/lead_score) are never enough —
+# mirrors prompt rule 5 ('priority requires strong supporting evidence').
+AI_REVIEW_SUBSTANTIVE_KEYS = frozenset({
+    "site_quality", "site_status", "automation_gaps", "hiring_evidence",
+    "review_evidence", "provider_evidence", "platform", "paper_signals",
+})
+
+
+def _ai_review_prompt(biz):
+    """Single-shot structured prompt: task, tone, context, evidence bundle,
+    strict JSON output contract, anti-fabrication rules, hypothesis labeling,
+    abstain instruction, and two few-shot examples. SGW-928 alignment: the
+    recommended offer sells the diagnosis (removing operational drag) — the
+    implementation tool is chosen AFTER diagnosis, never AI-first."""
+    sq = biz.get("site_quality") or {}
+    ls = biz.get("lead_score") or {}
+    hs = biz.get("hiring_signals") or []
+    rs = biz.get("review_signals") or []
+    evidence_lines = [
+        f"- name: {biz.get('name', '')}",
+        f"- trade: {biz.get('trade', '')}",
+        f"- url: {biz.get('url', '') or (biz.get('own_domains') or [''])[0]}",
+        f"- phones: {biz.get('phones', [])}",
+        f"- snippet: {biz.get('snippet', '')[:200]}",
+        f"- site_quality: status={sq.get('status')}, confidence={sq.get('confidence')}, "
+        f"website_score={sq.get('website_score')}, automation_gaps={sq.get('automation_gaps')}, "
+        f"platform={sq.get('platform')}, has_crm={sq.get('has_crm')}, "
+        f"has_analytics={sq.get('has_analytics')}, has_booking_system={sq.get('has_booking_system')}, "
+        f"has_outdated_email={sq.get('has_outdated_email')}, has_fax={sq.get('has_fax')}, "
+        f"observed_at={sq.get('observed_at')}",
+        f"- lead_score: score={ls.get('score')}, tier={ls.get('tier')}, "
+        f"reasons={ls.get('reasons', [])}",
+        f"- eligibility_state: {biz.get('eligibility_state')} "
+        f"({biz.get('eligibility_reason', '')})",
+        f"- hiring: checked_at={biz.get('hiring_checked_at')}, "
+        f"role_match={biz.get('hiring_role_match')}, "
+        f"signals={[{'title': s.get('title', '')[:80], 'source_kind': s.get('source_kind')} for s in hs[:5]]}",
+        f"- reviews: checked_at={biz.get('review_checked_at')}, "
+        f"negative={biz.get('review_negative')}, "
+        f"signals={[{'title': s.get('title', '')[:80], 'complaints': s.get('complaints', [])} for s in rs[:5]]}",
+        f"- provider_evidence (neutral corroboration only): "
+        f"{json.dumps(biz.get('provider_evidence', {}))[:400]}",
+        f"- evidence keys you may cite in evidence_refs: {_ai_review_evidence_keys(biz)}",
+    ]
+    prompt = f"""You are a prospect reviewer for a local-business lead pipeline. You review ONLY the evidence below — never invent facts. Your job: flag which prospects deserve a human sales call THIS quarter, and craft a diagnosis-first opening angle.
+
+Task: read the evidence bundle for the business and return a single JSON object matching the output contract exactly.
+
+Tone: concise, practical, direct. No fluff.
+
+EVIDENCE BUNDLE (this is ALL you know about the business):
+{chr(10).join(evidence_lines)}
+
+OUTPUT CONTRACT (strict JSON object, no markdown, no commentary outside the JSON):
+{{
+  "decision": "priority" | "research" | "watch" | "reject" | "abstain",
+  "confidence": 0.0-1.0,
+  "evidence_refs": ["subset of the evidence keys listed above"],
+  "bottleneck_hypothesis": "LABELED HYPOTHESIS: <one sentence, explicitly starting with 'hypothesis:'>",
+  "why_now": "why this prospect matters this quarter",
+  "recommended_first_offer": "diagnosis-first offer — name the operational drag to remove; the implementation tool (process change, existing software, automation, AI) is chosen AFTER diagnosis and only if the evidence supports it",
+  "email_draft": "2-4 sentence email",
+  "phone_opener": "one line",
+  "missing_evidence": ["what would raise confidence"],
+  "abstain_reason": "required when decision is abstain"
+}}
+
+ANTI-FABRICATION RULES (hard constraints):
+1. You may NOT claim facts not present in the evidence bundle: no owner names, no revenue, no employee counts, no specific complaints beyond the review signals listed, no hiring beyond the hiring signals listed, no software/location/pain the evidence does not mention.
+2. Every factual claim must map to an evidence key you cite in evidence_refs, and evidence_refs must be a subset of the evidence keys listed in the bundle.
+3. Any reasoning about the business's internal bottleneck is a HYPOTHESIS and must be labeled with the literal prefix "hypothesis:" inside bottleneck_hypothesis.
+4. If the evidence is too thin to support a decision, output "decision": "abstain" with an abstain_reason. Abstaining is always correct when evidence is weak.
+5. decision "priority" requires strong supporting evidence (verified site read or corroborated external signals) — never priority on name/trade alone.
+6. recommended_first_offer, email_draft, phone_opener must contain NO unsupported claims. Sell the diagnosis (e.g. "never miss another intake call"), not a tool, unless the evidence names the gap.
+
+EXAMPLES:
+
+Example 1 (weak evidence → abstain):
+Evidence: name="Unknown Co", trade="Plumbing", no site check, no phones, no signals.
+Expected:
+{{"decision": "abstain", "confidence": 0.1, "evidence_refs": ["name", "trade"], "bottleneck_hypothesis": "hypothesis: none — insufficient evidence", "why_now": "", "recommended_first_offer": "", "email_draft": "", "phone_opener": "", "missing_evidence": ["site_quality", "phones", "hiring", "reviews"], "abstain_reason": "no verified website, no contact path, no external signals"}}
+
+Example 2 (strong evidence → priority):
+Evidence: name="Real Firm LLC", trade="Accounting", site up/high confidence, automation_gaps=["no booking system"], phones=["(951) 225-1131"], hiring_role_match=true on own site, two corroborated review complaints.
+Expected:
+{{"decision": "priority", "confidence": 0.85, "evidence_refs": ["name", "trade", "phones", "site_quality", "automation_gaps", "hiring_evidence", "review_evidence"], "bottleneck_hypothesis": "hypothesis: intake/scheduling overload — no booking system plus hiring for an automatable role plus slow-response complaints", "why_now": "admin-heavy intake with a hiring load and corroborated slow-response complaints — removing the drag pays for itself this quarter", "recommended_first_offer": "an intake audit that stops missed calls and automates appointment scheduling", "email_draft": "Subject: missed calls and scheduling", "phone_opener": "I'll show you where your intake is leaking calls.", "missing_evidence": [], "abstain_reason": ""}}
+
+Return ONLY the JSON object."""
+    return prompt
+
+
+def _parse_ai_review(raw):
+    """Lenient JSON extraction + schema validation for the model reply.
+    First {...} block wins; every failure path lands on abstain so a bad
+    model response can NEVER crash the run or manufacture a decision.
+    Never raises."""
+    if not raw or not isinstance(raw, str):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
+    if not m:
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    try:
+        data = json.loads(m.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    if not isinstance(data, dict):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    # Decision whitelist; anything else → abstain.
+    decision = data.get("decision", "abstain")
+    if not isinstance(decision, str) or decision not in AI_REVIEW_DECISIONS:
+        decision = "abstain"
+    parsed = {
+        "decision": decision,
+        "confidence": data.get("confidence", 0.0),
+        "evidence_refs": data.get("evidence_refs", []) or [],
+        "bottleneck_hypothesis": data.get("bottleneck_hypothesis", "") or "",
+        "why_now": data.get("why_now", "") or "",
+        "recommended_first_offer": data.get("recommended_first_offer", "") or "",
+        "email_draft": data.get("email_draft", "") or "",
+        "phone_opener": data.get("phone_opener", "") or "",
+        "missing_evidence": data.get("missing_evidence", []) or [],
+        "abstain_reason": data.get("abstain_reason", "") or "",
+    }
+    if not isinstance(parsed["confidence"], (int, float)) or not isinstance(parsed["evidence_refs"], list):
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "unparseable model output"}
+    return parsed
+
+
+def _apply_ai_fabrication_guard(parsed, biz):
+    """Cheap, deterministic anti-embellishment: evidence_refs must be a
+    subset of the evidence actually captured on this record. Unbacked claims
+    are stripped, and a 'priority' that rests on zero valid refs is
+    downgraded to abstain (a strong decision with no grounding is exactly
+    the fabrication this guard exists to kill). Everything else passes
+    through — the AI's prose is advisory and reviewed by a human later."""
+    if parsed["decision"] == "abstain":
+        return parsed
+    valid = set(_ai_review_evidence_keys(biz))
+    refs = parsed.get("evidence_refs") or []
+    refs = [r for r in refs if isinstance(r, str) and r in valid]
+    # Strip unbacked claims in the prose fields.
+    for field in ("bottleneck_hypothesis", "why_now", "recommended_first_offer",
+                  "email_draft", "phone_opener"):
+        if isinstance(parsed.get(field), str):
+            parsed[field] = parsed[field][:500]
+    # A 'priority' verdict must rest on substantive evidence — a verified
+    # website read, automation gaps, hiring/review evidence, provider
+    # corroboration. Identity/score refs alone (name, trade, url, phones,
+    # lead_score) can never ground a priority call; without substantive
+    # backing it is downgraded to abstain (QC 2026-08-09: the old guard only
+    # checked for ANY surviving ref, so a fabricated 'priority' citing name
+    # + owner + revenue survived once the unbacked refs were stripped).
+    if parsed["decision"] == "priority":
+        if not refs or not (set(refs) & AI_REVIEW_SUBSTANTIVE_KEYS):
+            return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                    "bottleneck_hypothesis": "", "why_now": "",
+                    "recommended_first_offer": "", "email_draft": "",
+                    "phone_opener": "", "missing_evidence": [],
+                    "abstain_reason": "priority without substantive evidence — stripped by fabrication guard"}
+    parsed["evidence_refs"] = refs
+    return parsed
+
+
+def ai_review_candidate(biz):
+    """One grounded AI review for a single candidate. Returns the parsed
+    review + metadata (model, provider, reviewed_at, latency_ms,
+    tokens_used estimate). Any network/HTTP/timeout failure → abstain with
+    the error recorded — never raises, never crashes the run."""
+    if not AI_REVIEW_MODEL or not AI_REVIEW_BASE_URL:
+        return {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                "bottleneck_hypothesis": "", "why_now": "",
+                "recommended_first_offer": "", "email_draft": "",
+                "phone_opener": "", "missing_evidence": [],
+                "abstain_reason": "AI review not configured"}
+    start = time.monotonic()
+    raw_body = ""  # captured for the token estimate; empty on early failure
+    payload = json.dumps({
+        "model": AI_REVIEW_MODEL,
+        "messages": [
+            {"role": "system", "content": "You are a rigorous, evidence-grounded prospect reviewer. Never invent facts."},
+            {"role": "user", "content": _ai_review_prompt(biz)},
+        ],
+        "temperature": 0,           # determinism: same evidence → same review
+        "max_tokens": AI_REVIEW_MAX_TOKENS,
+    }).encode("utf-8")
+    base = AI_REVIEW_BASE_URL.rstrip("/")
+    url = f"{base}/chat/completions"
+    headers = {"Content-Type": "application/json", "User-Agent": "Mozilla/5.0"}
+    if AI_REVIEW_API_KEY:
+        headers["Authorization"] = f"Bearer {AI_REVIEW_API_KEY}"
+    try:
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=AI_REVIEW_TIMEOUT) as resp:
+            raw_body = resp.read().decode("utf-8", errors="replace")
+        body = json.loads(raw_body)
+        raw = (body.get("choices") or [{}])[0].get("message", {}).get("content", "") or ""
+        parsed = _parse_ai_review(raw)
+        parsed = _apply_ai_fabrication_guard(parsed, biz)
+    except Exception as e:  # noqa: BLE001 — a bad model/network must never kill the run
+        parsed = {"decision": "abstain", "confidence": 0.0, "evidence_refs": [],
+                  "bottleneck_hypothesis": "", "why_now": "",
+                  "recommended_first_offer": "", "email_draft": "",
+                  "phone_opener": "", "missing_evidence": [],
+                  "abstain_reason": f"AI review unavailable: {e}"}
+    latency_ms = int((time.monotonic() - start) * 1000)
+    parsed["model"] = AI_REVIEW_MODEL
+    parsed["provider"] = base
+    parsed["reviewed_at"] = datetime.now(timezone.utc).isoformat()
+    parsed["latency_ms"] = latency_ms
+    parsed["tokens_used"] = max(1, len(raw_body) // 4)  # ponytail char/4 estimate
+    return parsed
+
+
+def run_ai_review(cache):
+    """Second-pass AI oversight over the bounded candidate set: eligible and
+    research records only (post eligibility gate, post evidence enrichment),
+    top AI_REVIEW_MAX_CANDIDATES by deterministic score, skipping records
+    reviewed within AI_REVIEW_RECHECK_DAYS. Stores under biz['ai_review']
+    and returns decision counts. NEVER touches lead_score or eligibility —
+    purely advisory. Returns 0 reviewed when the reviewer is unconfigured
+    (and never touches the network)."""
+    if not AI_REVIEW_MODEL or not AI_REVIEW_BASE_URL:
+        log("AI review skipped (not configured)")
+        return {"reviewed": 0, "decisions": {}}
+    bizs = cache.get("businesses", {})
+    candidates = [
+        (norm, biz) for norm, biz in bizs.items()
+        if biz.get("eligibility_state") in ("eligible", "research") and biz.get("name")
+    ]
+    # Deterministic order: eligible first, then deterministic score desc.
+    candidates.sort(key=lambda nb: (nb[1].get("eligibility_state", "") != "eligible",
+                                    -(nb[1].get("lead_score") or {}).get("score", 0)))
+    reviewed = 0
+    decisions = {}
+    for norm, biz in candidates[:AI_REVIEW_MAX_CANDIDATES]:
+        old = (biz.get("ai_review") or {}).get("reviewed_at", "")
+        if old:
+            try:
+                age = (datetime.now(timezone.utc) - datetime.fromisoformat(old)).days
+            except ValueError:
+                age = AI_REVIEW_RECHECK_DAYS + 1
+            if age <= AI_REVIEW_RECHECK_DAYS:
+                continue  # fresh review — keep cost discipline
+        log(f"  AI review: {biz.get('name')}")
+        review = ai_review_candidate(biz)
+        biz["ai_review"] = review
+        reviewed += 1
+        decisions[review["decision"]] = decisions.get(review["decision"], 0) + 1
+        time.sleep(0.5)  # polite rate-limit spread, like the other passes
+    return {"reviewed": reviewed, "decisions": decisions}
+
+
 def _test_qualify_lead():
     """ponytail: assert-based acceptance check for T2–T5 scoring rules."""
     _sq_up = {"status": "up", "confidence": "high", "website_score": 2,
@@ -1965,6 +2325,184 @@ def _test_qualify_lead():
         assert _empty.get("provider_evidence") is None, "925 fail: ZERO_RESULTS stored evidence"
     finally:
         globals()["PLACES_API_KEY"] = _saved_key
+
+    # ── SGW-940: grounded AI review — opt-in, advisory, fabrication-guarded ──
+    _saved_ai = (globals()["AI_REVIEW_MODEL"], globals()["AI_REVIEW_BASE_URL"],
+                 globals()["AI_REVIEW_API_KEY"])
+    try:
+        # 1) Unconfigured (no model, no base_url) → zero reviewed, records
+        #    untouched, NO network (urlopen must never be called).
+        globals()["AI_REVIEW_MODEL"] = ""
+        globals()["AI_REVIEW_BASE_URL"] = ""
+        globals()["AI_REVIEW_API_KEY"] = ""
+        _inert_ai = {"name": "Inert Co", "trade": "Plumbing",
+                     "eligibility_state": "eligible",
+                     "lead_score": {"score": 55, "tier": "Warm"}}
+        _before_ai = json.dumps(_inert_ai, sort_keys=True)
+        with _mock.patch.object(urllib.request, "urlopen") as _u:
+            _r = run_ai_review({"businesses": {"inert": _inert_ai}})
+        _u.assert_not_called()  # 940 fail: unconfigured review must not touch the network
+        assert _r["reviewed"] == 0, f"940 fail: unconfigured review checked {_r['reviewed']}"
+        assert _r["decisions"] == {}, f"940 fail: unconfigured review decisions {_r['decisions']}"
+        assert json.dumps(_inert_ai, sort_keys=True) == _before_ai, "940 fail: unconfigured review mutated record"
+        assert _inert_ai.get("ai_review") is None, "940 fail: unconfigured review stored ai_review"
+        # 2) Parse layer: garbage / empty / non-JSON model output → abstain, never crash.
+        assert _parse_ai_review(None)["decision"] == "abstain"
+        assert _parse_ai_review("")["decision"] == "abstain"
+        assert _parse_ai_review("Sure! Here's my thinking...")["decision"] == "abstain"
+        assert _parse_ai_review("```json\n{not valid json\n```")["decision"] == "abstain"
+        assert _parse_ai_review("42")["decision"] == "abstain"
+        # Decision whitelist: unknown decision → abstain, valid ones pass.
+        assert _parse_ai_review(json.dumps({"decision": "urgent"}))["decision"] == "abstain"
+        for _d in ("priority", "research", "watch", "reject", "abstain"):
+            _p = _parse_ai_review(json.dumps({"decision": _d}))
+            assert _p["decision"] == _d, f"940 fail: whitelist {_d} → {_p['decision']}"
+        # Contract fields present with defaults on a minimal payload.
+        _p = _parse_ai_review(json.dumps({"decision": "watch", "confidence": 0.5}))
+        assert _p["confidence"] == 0.5 and _p["evidence_refs"] == [] and _p["abstain_reason"] == "", \
+            f"940 fail: contract defaults {_p}"
+        # 3) Anti-fabrication guard: weak evidence + model claims priority with
+        #    fabricated owner/revenue and refs that do not map to captured
+        #    evidence → priority downgraded to abstain, unbacked refs stripped.
+        _thin = {"name": "Thin Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                 "lead_score": {"score": 20, "tier": "Cold"},
+                 "site_quality": {"status": "unknown", "confidence": "low",
+                                  "automation_gaps": [], "website_score": -1}}
+        _fabricated = json.dumps({
+            "decision": "priority", "confidence": 0.95,
+            "evidence_refs": ["owner", "revenue", "name"],
+            "bottleneck_hypothesis": "hypothesis: owner Mike runs everything manually",
+            "why_now": "revenue $2M/yr and growing fast",
+            "recommended_first_offer": "AI agent to run their books",
+            "email_draft": "Hey Mike...", "phone_opener": "Hi Mike",
+            "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        _thin_before = json.dumps(_thin, sort_keys=True)
+        globals()["AI_REVIEW_MODEL"] = "fake-model-940"
+        globals()["AI_REVIEW_BASE_URL"] = "https://fake-endpoint.example/v1"
+        globals()["AI_REVIEW_API_KEY"] = ""
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _fabricated.decode()}}]}).encode())):
+            _thin_rev = ai_review_candidate(_thin)
+        assert _thin_rev["decision"] == "abstain", \
+            f"940 fail: thin-evidence priority not downgraded ({_thin_rev['decision']})"
+        assert "fabrication guard" in _thin_rev["abstain_reason"], \
+            f"940 fail: wrong downgrade reason {_thin_rev['abstain_reason']}"
+        assert "owner" not in _thin_rev["evidence_refs"], f"940 fail: unbacked ref survived {_thin_rev['evidence_refs']}"
+        assert json.dumps(_thin, sort_keys=True) == _thin_before, "940 fail: ai_review_candidate mutated record"
+        # A 'watch' with mixed refs: valid refs kept, unbacked refs stripped.
+        _mixed = json.dumps({
+            "decision": "watch", "confidence": 0.4,
+            "evidence_refs": ["name", "revenue", "trade"],
+            "bottleneck_hypothesis": "hypothesis: manual intake",
+            "why_now": "", "recommended_first_offer": "",
+            "email_draft": "", "phone_opener": "", "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _mixed.decode()}}]}).encode())):
+            _mixed_rev = ai_review_candidate(_thin)
+        assert _mixed_rev["decision"] == "watch", f"940 fail: watch lost ({_mixed_rev['decision']})"
+        assert _mixed_rev["evidence_refs"] == ["name", "trade"], \
+            f"940 fail: unbacked ref not stripped {_mixed_rev['evidence_refs']}"
+        # 4) SGW-928 alignment: a process-only (non-AI) recommended_first_offer
+        #    survives storage as-is, and the prompt itself must not force
+        #    AI-first language.
+        _proc = {"name": "Proc Co", "trade": "Accounting", "eligibility_state": "eligible",
+                 "phones": ["(951) 225-1131"],
+                 "site_quality": {"status": "up", "confidence": "high",
+                                  "website_score": 1, "automation_gaps": ["no booking system"],
+                                  "platform": "wordpress", "observed_at": "2099-01-01T00:00:00+00:00"},
+                 "lead_score": {"score": 50, "tier": "Warm"},
+                 "hiring_checked_at": "2099-01-01T00:00:00+00:00",
+                 "hiring_role_match": False, "hiring_signals": [],
+                 "review_checked_at": "2099-01-01T00:00:00+00:00",
+                 "review_negative": False, "review_signals": []}
+        _proc_payload = json.dumps({
+            "decision": "priority", "confidence": 0.7,
+            "evidence_refs": ["name", "trade", "phones", "site_quality", "automation_gaps"],
+            "bottleneck_hypothesis": "hypothesis: no booking system means missed intake calls",
+            "why_now": "manual scheduling is visible drag",
+            "recommended_first_offer": "an intake audit that stops missed calls — we fix the process, then decide what software or automation to use",
+            "email_draft": "Subject: missed calls\nMost of your calls are being missed...",
+            "phone_opener": "I'll show you where your intake is leaking calls.",
+            "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(json.dumps({
+                                    "choices": [{"message": {"content": _proc_payload.decode()}}]}).encode())):
+            _proc_rev = ai_review_candidate(_proc)
+        assert _proc_rev["decision"] == "priority", f"940 fail: process-only review lost ({_proc_rev['decision']})"
+        assert "audit that stops missed calls" in _proc_rev["recommended_first_offer"], \
+            f"940 fail: process-only offer mangled ({_proc_rev['recommended_first_offer']})"
+        assert _proc_rev["model"] == "fake-model-940" and _proc_rev["provider"] == "https://fake-endpoint.example/v1", \
+            "940 fail: metadata missing"
+        assert _proc_rev["reviewed_at"] and isinstance(_proc_rev["latency_ms"], int) and _proc_rev["tokens_used"] >= 1, \
+            f"940 fail: metadata incomplete {_proc_rev}"
+        # The prompt must not force AI-first language — the invariant
+        # (implementation chosen after diagnosis) is present verbatim.
+        _prompt = _ai_review_prompt(_proc)
+        assert "chosen AFTER diagnosis" in _prompt, "940 fail: prompt lost diagnosis-first invariant"
+        assert "evidence keys you may cite" in _prompt, "940 fail: prompt lost evidence-key whitelist"
+        # 5) Network failure → abstain with the error recorded, no crash.
+        globals()["AI_REVIEW_MODEL"] = "fake-model-940"
+        globals()["AI_REVIEW_BASE_URL"] = "https://fake-endpoint.example/v1"
+        _net = {"name": "Net Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen",
+                                side_effect=urllib.error.URLError("boom")):
+            _net_rev = ai_review_candidate(_net)
+        assert _net_rev["decision"] == "abstain", f"940 fail: network error not abstain ({_net_rev['decision']})"
+        assert "AI review unavailable" in _net_rev["abstain_reason"], \
+            f"940 fail: network error not recorded {_net_rev['abstain_reason']}"
+        assert _net.get("ai_review") is None, "940 fail: network error stored ai_review"
+        # 6) run_ai_review end-to-end with a configured reviewer: bounded to
+        #    eligible/research only, deterministic score order, freshness skip,
+        #    and lead_score/eligibility untouched.
+        _cfg = {"businesses": {
+            "a": {"name": "A Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                  "lead_score": {"score": 40, "tier": "Warm"}},
+            "b": {"name": "B Co", "trade": "Roofing", "eligibility_state": "eligible",
+                  "lead_score": {"score": 80, "tier": "Hot"}},
+            "c": {"name": "C Co", "trade": "HVAC", "eligibility_state": "research",
+                  "lead_score": {"score": 90, "tier": "Warm"}},
+            "d": {"name": "D Co", "trade": "Pest", "eligibility_state": "rejected",
+                  "lead_score": {"score": 99, "tier": "Hot"}},
+            "e": {"name": "E Co", "trade": "Plumbing", "eligibility_state": "eligible",
+                  "lead_score": {"score": 70, "tier": "Warm"},
+                  "ai_review": {"reviewed_at": "2099-01-01T00:00:00+00:00"}},
+        }}
+        _ok_review = json.dumps({
+            "decision": "watch", "confidence": 0.5, "evidence_refs": ["name"],
+            "bottleneck_hypothesis": "hypothesis: unknown", "why_now": "",
+            "recommended_first_offer": "", "email_draft": "",
+            "phone_opener": "", "missing_evidence": [], "abstain_reason": "",
+        }).encode()
+        _resp_payload = json.dumps({"choices": [{"message": {"content": _ok_review.decode()}}]}).encode()
+        with _mock.patch.object(urllib.request, "urlopen",
+                                return_value=_FakeResp(_resp_payload)):
+            _cfg_res = run_ai_review(_cfg)
+        # b (80) and c (90) are eligible/research and score-ordered — both
+        # reviewed even though c's score is higher: eligible first, then score.
+        assert _cfg_res["reviewed"] == 3, f"940 fail: run reviewed {_cfg_res['reviewed']} (expect 3: b, c, a)"
+        assert _cfg_res["decisions"] == {"watch": 3}, f"940 fail: decisions {_cfg_res['decisions']}"
+        assert "ai_review" in _cfg["businesses"]["b"] and "ai_review" in _cfg["businesses"]["c"] \
+            and "ai_review" in _cfg["businesses"]["a"], "940 fail: review not stored on candidates"
+        assert _cfg["businesses"]["d"].get("ai_review") is None, "940 fail: rejected record reviewed"
+        _e_before = json.dumps(_cfg["businesses"]["e"], sort_keys=True)
+        assert json.dumps(_cfg["businesses"]["e"], sort_keys=True) == _e_before, \
+            "940 fail: fresh-review skip mutated record"
+        # Never touches lead_score/eligibility.
+        for _k in ("a", "b", "c", "d", "e"):
+            assert _cfg["businesses"][_k]["eligibility_state"] == _cfg["businesses"][_k].get("eligibility_state"), \
+                "940 fail: eligibility changed"
+        assert _cfg["businesses"]["b"]["lead_score"] == {"score": 80, "tier": "Hot"}, \
+            "940 fail: lead_score changed by AI review"
+        assert _cfg["businesses"]["c"]["lead_score"] == {"score": 90, "tier": "Warm"}, \
+            "940 fail: research lead_score changed by AI review"
+    finally:
+        globals()["AI_REVIEW_MODEL"], globals()["AI_REVIEW_BASE_URL"], \
+            globals()["AI_REVIEW_API_KEY"] = _saved_ai
 
     print("qualify_lead self-check: all assertions passed")
 
@@ -2935,6 +3473,11 @@ def main():
                         help="SGW-925: Google Places identity enrichment pass over "
                              "eligible/research records (requires GOOGLE_PLACES_API_KEY; "
                              "bounded by PLACES_MAX_PER_RUN). No key → skip, exit 0.")
+    parser.add_argument("--ai-review", action="store_true",
+                        help="SGW-940: grounded AI second-pass review of eligible/research "
+                             "candidates (requires AI_REVIEW_MODEL + AI_REVIEW_BASE_URL; "
+                             "bounded by AI_REVIEW_MAX_CANDIDATES). Advisory only — never "
+                             "changes lead_score or eligibility. Unconfigured → skip, exit 0.")
     args = parser.parse_args()
 
     # SGW-938 B6: self-check mode — the previously-dead _test_qualify_lead()
@@ -2958,6 +3501,19 @@ def main():
         if n:
             save_cache(cache)
         log(f"Places enrichment: {n} records checked")
+        sys.exit(0)
+
+    # SGW-940: standalone grounded AI review pass — cache only, no crawl.
+    # Explicit OPT-IN: never auto-runs on normal crawls (cost discipline).
+    # Unconfigured (no model or no base_url) → one log line, exit 0, zero
+    # network, cache untouched. Never modifies lead_score/eligibility —
+    # advisory opinions land under biz['ai_review'] for the SGW-926 brief.
+    if args.ai_review:
+        cache = load_cache()
+        res = run_ai_review(cache)
+        if res["reviewed"]:
+            save_cache(cache)
+        log(f"AI review: {res['reviewed']} candidates reviewed ({res['decisions']})")
         sys.exit(0)
 
     # SGW-863: config-gated collectors — disable at runtime via CLI
