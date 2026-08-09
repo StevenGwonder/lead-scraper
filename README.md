@@ -40,6 +40,22 @@ Every Hot/Warm card shows a **"Pitch this:"** line derived from the top signal, 
 - **HTML reports**: Dark North Web Pro branded, written to `~/.hermes/scripts/reports/`
 - **pip allowed**: Install on Hermes before use; justify any new dep against what stdlib already does
 
+## Eligibility gate (SGW-941)
+
+Before any business can be owner-facing, it must pass a deterministic gate:
+- **rejected** — government/public agencies, corporate locator/job subdomains
+  (`agents.*`, `jobs.*`, `careers.*`), national-enterprise branches (parent
+  platform is not the prospect), and directory/SEO listings. These never enter
+  the cache at crawl time and are swept to Cold (score 0, evidence preserved)
+  on every load.
+- **research** — no verified contact path yet, or no domain/identity to
+  verify. Routed to the collapsed "Research Needed" report section, never Warm.
+- **eligible** — distinct local operating business with a contact path.
+
+The gate re-runs on every cache load, so junk that slips crawl-time checks is
+caught on the next run. `eligibility_state` / `eligibility_reason` are
+persisted per record for debugging.
+
 ## Website site check (sub-input, not the headline metric)
 
 The 0-5 site check is a sub-input to Digital Footing, not the primary ranking. A great website doesn't disqualify a lead — a business can have a beautiful site and still drown in manual intake.

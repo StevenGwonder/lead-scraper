@@ -99,6 +99,34 @@ DIRECTORY_PATH_PATTERNS_WEAK = [
     r'/contact-us(?:/|$)',
 ]
 
+# ── SGW-941: ELIGIBILITY GATE — entities that can never be owner-facing ──
+# A prospect may only become Warm/priority if it is a distinct operating
+# business in the service area. These rules are the deterministic first-line
+# sanitation; AI review (SGW-940) runs AFTER this gate.
+GOVERNMENT_TLD_SUFFIXES = (".gov", ".edu", ".mil")
+# Corporate locator/careers subdomains — carriers and big firms publish
+# "agents." / "agency." / "jobs." / "careers." microsites; those are NOT the
+# local owner-led business. Boundary-matched on the first label only.
+LOCATOR_SUBDOMAIN_LABELS = ("agents", "agency", "jobs", "careers", "locations", "locator")
+# National enterprises whose local offices are branches, not owner-led SMB
+# retainer buyers. Conservative exact-domain set — add only with evidence.
+NATIONAL_ENTERPRISE_DOMAINS = {
+    "statefarm.com", "allstate.com", "farmers.com", "geico.com",
+    "progressive.com", "libertymutual.com", "usaa.com", "nationwide.com",
+    "travelers.com", "centurycommunities.com", "drdhorton.com", "lennar.com",
+    "kbhome.com", "taylormorrison.com", "pulte.com", "chase.com", "wellsfargo.com",
+    "bankofamerica.com", "homedepot.com", "lowes.com", "costco.com",
+    "walmart.com", "target.com", "starbucks.com", "mcdonalds.com",
+    "subway.com", "dominos.com", "pizzahut.com", "tacobell.com",
+    "marriott.com", "hilton.com", "holidayinn.com", "bestwestern.com",
+    "ups.com", "fedex.com", "usps.com", "att.com", "verizon.com",
+    "tmobile.com", "comcast.com", "spectrum.com", "adt.com",
+    "pestcontrol.com", "orkin.com", "terminix.com", "servpro.com",
+    "acehardware.com", "truevalue.com", "ace.com", "kroger.com",
+    "safeway.com", "ralphs.com", "vons.com", "albertsons.com",
+    "autozone.com", "oreillyauto.com", "advanceautoparts.com", "napaonline.com",
+}
+
 # SGW-864: cleaned names that are SEO titles, not business brands.
 # These are rejected in the crawl loop and downgraded in the cache sweep.
 GENERIC_BUSINESS_NAME_PATTERNS = [
@@ -227,6 +255,90 @@ def _is_directory_record(url, name=""):
     if _is_generic_name(nm):
         return True
     return False
+
+
+# ── SGW-941: ELIGIBILITY GATE ──────────────────────────────────────────
+def _domain_labels(domain):
+    """First-label (subdomain) + registrable-domain split of a host.
+    'agents.statefarm.com' → ('agents', 'statefarm.com');
+    'prfamilylawyers.com' → ('', 'prfamilylawyers.com')."""
+    d = (domain or "").lower().rstrip(".")
+    if not d:
+        return "", ""
+    labels = d.split(".")
+    if len(labels) >= 3:
+        return labels[0], ".".join(labels[1:])
+    return "", d
+
+
+def assess_eligibility(url, name="", trade="", phones=None, own_domains=None):
+    """SGW-941: deterministic first-line eligibility gate.
+
+    Returns ("eligible"|"research"|"rejected", reason). A prospect is
+    REJECTED when it is a government body, national directory/locator page,
+    job subdomain, generic unresolved page-title, or a national-enterprise
+    branch without a distinct local identity. Unknown signals → "research"
+    (never Warm/priority). Local franchises/offices with a resolved local
+    identity + verified contact survive as "eligible" — the parent platform
+    is not the prospect."""
+    url_l = (url or "").lower()
+    domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0] if url_l else ""
+    first_label, base_domain = _domain_labels(domain)
+
+    # 1. Government / public agency / academic — never a prospect.
+    if any(base_domain.endswith(suf) for suf in GOVERNMENT_TLD_SUFFIXES) or ".gov" in domain:
+        return "rejected", "government/public entity"
+    # 2. Corporate locator/careers subdomains (agents. / jobs. / careers.).
+    if first_label in LOCATOR_SUBDOMAIN_LABELS:
+        return "rejected", f"locator/job subdomain ({first_label}.{base_domain})"
+    # 3. National enterprise branch — the local office is not the buyer.
+    if base_domain in NATIONAL_ENTERPRISE_DOMAINS:
+        return "rejected", "national enterprise branch (parent platform is not the prospect)"
+    # 4. Directory/aggregator/SEO listing (existing SGW-864 rules). Generic
+    #    page titles ("Contact Us", "Home") are caught here — rejected, since
+    #    a title with no brand identity is not a business at all.
+    if _is_directory_record(url, name):
+        return "rejected", "directory/SEO listing"
+    # 5. No contact path captured yet → can't be owner-facing.
+    if not phones:
+        return "research", "no verified contact path"
+    # 6. No own domain AND no directory-domain list → nothing to verify against.
+    if not own_domains and not url:
+        return "research", "no domain/identity to verify"
+    return "eligible", "distinct local operating business"
+
+
+def apply_eligibility_sweep(cache):
+    """SGW-941: run the eligibility gate over the cached population.
+
+    Mutates in place (append-compatible): sets eligibility_state + reason on
+    every business, routes 'rejected' records to Cold with a zeroed score
+    (evidence preserved — nothing deleted), and 'research' records to Cold
+    with a reason. 'eligible' records keep their computed score. Returns
+    counts {'eligible','research','rejected'} for the run log."""
+    counts = {"eligible": 0, "research": 0, "rejected": 0}
+    for biz in cache.get("businesses", {}).values():
+        url = biz.get("url", "") or (biz.get("own_domains") or [""])[0]
+        state, reason = assess_eligibility(
+            url, biz.get("name", ""), biz.get("trade", ""),
+            biz.get("phones", []), biz.get("own_domains", []))
+        biz["eligibility_state"] = state
+        biz["eligibility_reason"] = reason
+        counts[state] = counts.get(state, 0) + 1
+        if state in ("rejected", "research"):
+            # Route out of the owner-facing stream. Keep raw evidence (signals,
+            # site_quality) so nothing useful is lost; the score is zeroed and
+            # the tier forced to Cold so these can never enter Warm/priority.
+            if not biz.get("lead_score") or isinstance(biz.get("lead_score"), dict):
+                biz["lead_score"] = {
+                    "score": 0, "tier": "Cold", "breakdown": {},
+                    "reasons": [f"eligibility: {reason}"]}
+            else:
+                biz["lead_score"]["tier"] = "Cold"
+                biz["lead_score"]["score"] = 0
+                if reason not in biz["lead_score"].setdefault("reasons", []):
+                    biz["lead_score"]["reasons"].append(f"eligibility: {reason}")
+    return counts
 
 # SGW-864 round 2: page-title records ("Contact Us", "About", "Careers") and
 # modifier-generic names ("White-Label Bookkeeping Services", "Temecula CPA, CPA")
@@ -1564,6 +1676,51 @@ def _test_qualify_lead():
     assert _signal_checked_recently(_sweep_cache["businesses"]["stale"]) is False, \
         "939 fail: stale record misjudged"
 
+    # ── SGW-941: eligibility gate ──
+    # Government / public agency — rejected
+    assert assess_eligibility("https://ca.gov/board/accountancy", "CA Board", "Accounting",
+                              ["(951) 555-0101"], ["ca.gov"])[0] == "rejected", "941 fail: gov not rejected"
+    assert assess_eligibility("https://school.edu/", "Some College", "Education",
+                              ["(951) 555-0101"], ["school.edu"])[0] == "rejected", "941 fail: edu not rejected"
+    # Corporate locator/careers subdomains — rejected
+    assert assess_eligibility("https://agents.statefarm.com/ca/murrieta", "State Farm Agent", "Insurance",
+                              ["(951) 555-0101"], ["agents.statefarm.com"])[0] == "rejected", "941 fail: agents. subdomain not rejected"
+    assert assess_eligibility("https://jobs.allstate.com/", "Allstate Careers", "Insurance",
+                              ["(951) 555-0101"], ["jobs.allstate.com"])[0] == "rejected", "941 fail: jobs. subdomain not rejected"
+    # National enterprise branch — rejected
+    assert assess_eligibility("https://www.allstate.com/murrieta-office", "Allstate Murrieta", "Insurance",
+                              ["(951) 555-0101"], ["allstate.com"])[0] == "rejected", "941 fail: national enterprise not rejected"
+    # Directory / SEO listing — rejected (SGW-864 rules preserved)
+    assert assess_eligibility("https://lawyerland.com/lawyers/murrieta", "Lawyerland", "Law",
+                              ["(951) 555-0101"], ["lawyerland.com"])[0] == "rejected", "941 fail: directory not rejected"
+    # Generic page title without own domain — rejected (a title is not a business)
+    assert assess_eligibility("https://example.com/contact", "Contact Us", "Law",
+                              [], [])[0] == "rejected", "941 fail: generic page title not rejected"
+    # No contact path — research
+    assert assess_eligibility("https://realfirm.com", "Real Firm LLC", "Accounting",
+                              [], ["realfirm.com"])[0] == "research", "941 fail: no-contact not research"
+    # Distinct local business — eligible
+    assert assess_eligibility("https://singletonsmith.com", "Singleton Smith Law Offices", "Law Office",
+                              ["(951) 555-0101"], ["singletonsmith.com"])[0] == "eligible", "941 fail: real firm not eligible"
+    # Local franchise/office with own identity + contact — eligible (parent is not the prospect)
+    assert assess_eligibility("https://murrietainsurance.com", "Murrieta Insurance Agency", "Insurance",
+                              ["(951) 555-0101"], ["murrietainsurance.com"])[0] == "eligible", "941 fail: local agency not eligible"
+    # apply_eligibility_sweep routing: rejected/research → Cold zeroed, eligible keeps score
+    _elig_cache = {"businesses": {
+        "gov1": {"name": "CA Board", "url": "https://ca.gov/board", "own_domains": ["ca.gov"],
+                 "phones": ["(951) 555-0101"], "lead_score": {"score": 54, "tier": "Warm"}},
+        "firm1": {"name": "Real Firm LLC", "url": "https://realfirm.com", "own_domains": ["realfirm.com"],
+                  "phones": ["(951) 555-0101"], "lead_score": {"score": 50, "tier": "Warm"}},
+        "noct1": {"name": "No Contact LLC", "url": "https://noct.com", "own_domains": ["noct.com"],
+                  "phones": [], "lead_score": {"score": 45, "tier": "Warm"}},
+    }}
+    _ec = apply_eligibility_sweep(_elig_cache)
+    assert _ec == {"eligible": 1, "research": 1, "rejected": 1}, f"941 fail: sweep counts {_ec}"
+    assert _elig_cache["businesses"]["gov1"]["lead_score"]["tier"] == "Cold" and \
+        _elig_cache["businesses"]["gov1"]["lead_score"]["score"] == 0, "941 fail: gov not routed to Cold"
+    assert _elig_cache["businesses"]["noct1"]["lead_score"]["tier"] == "Cold", "941 fail: no-contact not routed"
+    assert _elig_cache["businesses"]["firm1"]["lead_score"]["tier"] == "Warm", "941 fail: eligible firm lost score"
+
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -1622,6 +1779,15 @@ def load_cache():
                     cleaned_sq = [p for p in sq["phones"] if _normalize_phone(p)]
                     if len(cleaned_sq) != len(sq["phones"]):
                         sq["phones"] = cleaned_sq
+            # SGW-941: eligibility gate — after identity re-key + phone purge so
+            # the gate sees resolved names and clean contact paths. Government,
+            # locator/job subdomains, national-enterprise branches, and
+            # directory/SEO listings are rejected (Cold, zeroed score, evidence
+            # preserved); unverifiable records route to research (Cold). The
+            # gate re-runs on every load so newly-ingested junk is caught even
+            # if it slipped the crawl-time check.
+            _elig_counts = apply_eligibility_sweep(cache)
+            log(f"eligibility sweep: {_elig_counts}")
             # Prune stale signals/fb_groups (no date field → keep to be safe)
             cache["signals"] = [s for s in cache.get("signals", []) if s.get("date", "z") > cutoff_sig]
             cache["fb_groups"] = [g for g in cache.get("fb_groups", []) if g.get("date", "z") > cutoff_sig]
@@ -1941,6 +2107,21 @@ body {
     font-weight: 500;
 }
 
+/* SGW-941: eligibility state note on cards */
+.eligibility-note {
+    margin-top: 8px;
+    font-size: 0.7em;
+    color: var(--text-muted);
+    border-top: 1px dashed var(--border);
+    padding-top: 6px;
+}
+.eligibility-note b {
+    color: var(--text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    font-size: 0.9em;
+}
+
 /* ── PITCH LINE ── */
 .pitch-line {
     margin-top: 10px;
@@ -2074,12 +2255,16 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
         is_new = biz.get("first_seen", "") > new_cutoff
         biz["_new"] = is_new
 
-    # T9: Categorize by lead tier — Unverified is its own bucket, not Cold
-    hot, warm, cold, unverified = [], [], [], []
+    # T9: Categorize by lead tier — Unverified is its own bucket, not Cold.
+    # SGW-941: 'research' eligibility is its own bucket, not Cold — these are
+    # not vetted leads and must not look like actionable prospects.
+    hot, warm, cold, unverified, research = [], [], [], [], []
     for biz in businesses.values():
         ls = biz.get("lead_score", {})
         tier = ls.get("tier", "Cold")
-        if tier == "Hot":
+        if biz.get("eligibility_state") == "research":
+            research.append(biz)
+        elif tier == "Hot":
             hot.append(biz)
         elif tier == "Warm":
             warm.append(biz)
@@ -2186,6 +2371,12 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
                 html += f'<span class="reason-tag">{r}</span>'
             html += '</div></details>'
 
+        # SGW-941: eligibility reason — visible in supporting detail so a
+        # rejected/research record explains itself without polluting the pitch.
+        if biz.get("eligibility_state") and biz.get("eligibility_reason"):
+            html += (f'<div class="eligibility-note">Eligibility: '
+                     f'<b>{biz.get("eligibility_state")}</b> — {biz.get("eligibility_reason")}</div>')
+
         html += '</div>'
         return html
 
@@ -2238,6 +2429,22 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
             section += render_lead_card(biz)
         if len(unverified) > 8:
             section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(unverified)-8} more...</p>'
+        section += '</details></div>'
+        cards.append(section)
+
+    # SGW-941: RESEARCH — eligible-looking but not yet verified as a distinct
+    # local business (no contact path, generic title without resolved brand).
+    # Collapsed, clearly labeled as needing research, never in the actionable
+    # stream.
+    if research:
+        section = '<div class="section">'
+        section += '<div class="section-title"><h2>🔬 Research Needed — not yet vetted</h2>'
+        section += f'<span class="badge badge-cold">{len(research)}</span></div>'
+        section += f'<details><summary>{len(research)} businesses — need identity/contact verification before they can be leads</summary>'
+        for biz in research[:8]:
+            section += render_lead_card(biz)
+        if len(research) > 8:
+            section += f'<p style="color:#444;font-size:0.75em;text-align:center;padding:8px;">+ {len(research)-8} more...</p>'
         section += '</details></div>'
         cards.append(section)
 
@@ -2558,6 +2765,18 @@ def main():
                 # must be treated as its own domain, not an aggregator echo.
                 is_own_site = not _is_aggregator_domain(domain)
 
+                # SGW-941: eligibility gate at ingest — rejected entities
+                # (government, locator/job subdomains, national enterprise
+                # branches, directory/SEO listings) NEVER enter the cache.
+                # Research/eligible records are stored with their state; the
+                # load-time sweep re-assesses after the website check merges
+                # phones, promoting eligible records on the next run.
+                _elig_state, _elig_reason = assess_eligibility(
+                    url, name, trade, phones, [domain] if is_own_site else [])
+                if _elig_state == "rejected":
+                    log(f"  eligibility rejected at ingest ({_elig_reason}): {name}")
+                    continue
+
                 # Fix 2: dedup by domain — find existing entry with same domain
                 existing_norm = None
                 if is_own_site:
@@ -2590,6 +2809,7 @@ def main():
                         "dir_domains": [] if is_own_site else [domain],
                         "first_seen": now.isoformat(), "last_seen": now.isoformat(),
                         "url": urlkey, "site_quality": None,
+                        "eligibility_state": _elig_state, "eligibility_reason": _elig_reason,
                     }
             time.sleep(args.delay)
 
@@ -2626,6 +2846,20 @@ def main():
             biz["emails"] = existing_emails
         # Compute lead qualification score
         biz["lead_score"] = qualify_lead(biz, sq)
+        # SGW-941: re-assess eligibility now that the website check merged
+        # phones/emails — a research record without contact at ingest can
+        # become eligible once the site yields a contact path. The score is
+        # recomputed only when the record is eligible; otherwise the next
+        # load-time sweep routes it correctly.
+        if biz.get("eligibility_state") == "research":
+            _state, _reason = assess_eligibility(
+                biz.get("url", "") or (biz.get("own_domains") or [""])[0],
+                biz.get("name", ""), biz.get("trade", ""),
+                biz.get("phones", []), biz.get("own_domains", []))
+            biz["eligibility_state"] = _state
+            biz["eligibility_reason"] = _reason
+            if _state == "eligible":
+                biz["lead_score"] = qualify_lead(biz, sq)
         checks_done += 1
         time.sleep(0.5)
 
