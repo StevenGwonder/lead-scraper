@@ -586,6 +586,23 @@ SCORING = {
     "tiers": {"hot": 65, "warm": 40},
 }
 
+# ── SGW-925: GOOGLE PLACES IDENTITY ENRICHMENT (DORMANT) ────────────────
+# Official Places API only — never scrape Maps pages. Completely inert without
+# a key: places_identity() logs one line and returns None (no network). Full
+# activation = GOOGLE_PLACES_API_KEY set AND --places passed. Provider evidence
+# is stored as neutral corroboration only; scoring/routing effects wait for the
+# benchmark comparison (see docs/source-audit-2026-08.md — no provider locked in).
+PLACES_API_KEY = os.getenv("GOOGLE_PLACES_API_KEY", "")
+PLACES_BASE = "https://maps.googleapis.com/maps/api/place"
+PLACES_MAX_PER_RUN = 40          # per-run request budget guard
+PLACES_EXPIRY_DAYS = 90          # freshness: sweeper treats evidence older than this as stale
+# Strict field selection (official billing terms: you pay per data group asked).
+PLACES_FIELDS = ("formatted_address,name,place_id,website,"
+                 "international_phone_number,business_status")
+# ponytail: optional opt-in env — append the trade to the text query for a
+# broader match when the SearXNG-derived name is mangled. Unset = exact name+zip.
+PLACES_TEXT_SEARCH = os.getenv("PLACES_TEXT_SEARCH", "")
+
 # ── SGW-863: COLLECTOR REGISTRY ──────────────────────────────────────────
 # Pluggable, config-gated collectors. Each entry: name, enabled, timeout_s.
 # run_collector() wraps every collector with per-source timeout + failure
@@ -597,6 +614,9 @@ COLLECTORS = {
     "hiring_signals":  {"enabled": True,  "timeout_s": 90,  "desc": "Job-posting signal search"},
     "review_signals":  {"enabled": True,  "timeout_s": 90,  "desc": "Review-complaint signal search"},
     "buying_signals":  {"enabled": True,  "timeout_s": 120, "desc": "Reddit/FB buying-signal crawl"},
+    # SGW-925: dormant without GOOGLE_PLACES_API_KEY — run_collector() logs
+    # "collector disabled" and returns None without touching the network.
+    "places_identity": {"enabled": True,  "timeout_s": 20,  "desc": "Google Places identity enrichment (dormant without key)"},
 }
 
 def collector_enabled(name):
@@ -663,6 +683,106 @@ def searx_search(query, limit=15, retries=1, delay=5):
             if attempt < retries:
                 time.sleep(delay)
     return []
+
+
+# ── SGW-925: GOOGLE PLACES IDENTITY ENRICHMENT (DORMANT) ────────────────
+def places_identity(biz_name, trade="", zip_hint="92562"):
+    """One-shot Google Places identity lookup via Text Search (official API).
+
+    Returns a dict with provider/source + observed_at + confidence + state +
+    provenance, or None when the key is absent / lookup fails / no match.
+    Missing fields are omitted (caller stores UNKNOWN). Never raises: any
+    failure → None (run_collector also guards, this is belt and braces).
+
+    Official-API terms: results shown to end users must include the "Powered
+    by Google" attribution. This issue stores evidence only — no user-facing
+    display — but the adapter must not be wired into display without it.
+    """
+    if not PLACES_API_KEY:
+        log("collector disabled: places_identity (no API key)")
+        return None
+    # Strict field selection — billing is per requested data group (Essentials
+    # $5/1k, contact fields at the Enterprise tier $35/1k for text search).
+    query = f"{biz_name} {trade} {zip_hint}" if (trade and PLACES_TEXT_SEARCH) else f"{biz_name} {zip_hint}"
+    params = urllib.parse.urlencode({
+        "query": query, "key": PLACES_API_KEY, "fields": PLACES_FIELDS,
+        "inputtype": "textquery",
+    })
+    url = f"{PLACES_BASE}/findplacefromtext/json?{params}"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    with urllib.request.urlopen(req, timeout=15) as resp:
+        data = json.loads(resp.read())
+    if data.get("status") != "OK" or not data.get("candidates"):
+        return None
+    c = data["candidates"][0]
+    if c.get("business_status") == "CLOSED_PERMANENTLY":
+        return None  # closed business is not a prospect — neutral, no evidence
+    ev = {
+        "provider": "google_places",
+        "source": "google_places_api",
+        "provenance": "google_places_api",
+        "state": "confirmed" if c.get("place_id") else "unconfirmed",
+        "confidence": "high" if c.get("place_id") else "medium",
+        "observed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    for k, api_key in (("name", "name"), ("address", "formatted_address"),
+                       ("website", "website"), ("phone", "international_phone_number")):
+        if c.get(api_key):
+            ev[k] = c[api_key]  # missing → UNKNOWN (field simply absent)
+    if c.get("place_id"):
+        ev["place_id"] = c["place_id"]
+    return ev
+
+
+def run_places_enrichment(cache, limit=PLACES_MAX_PER_RUN):
+    """Enrich eligible/research records with Places identity evidence.
+
+    Bounded by limit and run only when a key exists. Evidence is stored under
+    biz['provider_evidence']['google_places'] — never merged into
+    site_quality/lead_score, never lowers a prospect. 401/403/500/timeout →
+    run_collector returns None → record untouched → run continues (SGW-863)."""
+    if not PLACES_API_KEY:
+        log("collector disabled: places_identity (no API key)")
+        return 0
+    bizs = cache.get("businesses", {})
+    # Eligible first, then research — bounded by the per-run budget.
+    # ponytail: safe sort key — corrupt/non-dict lead_score (SGW-941 QC) must
+    # never crash the enrichment pass, so scores are read defensively.
+    def _score(kv):
+        ls = kv[1].get("lead_score", {})
+        try:
+            return ls.get("score") or 0
+        except AttributeError:
+            return 0
+    ranked = sorted(bizs.items(),
+                    key=lambda kv: (kv[1].get("eligibility_state", "") != "eligible", -_score(kv)))
+    done = 0
+    for norm, biz in ranked:
+        if done >= limit:
+            break
+        if biz.get("eligibility_state") not in ("eligible", "research"):
+            continue
+        if not biz.get("name"):
+            continue
+        # Freshness: keep 90 days, then re-check (SGW-925).
+        old = (biz.get("provider_evidence") or {}).get("google_places", {}).get("observed_at")
+        if old:
+            try:
+                if (datetime.now(timezone.utc) - datetime.fromisoformat(old)).days <= PLACES_EXPIRY_DAYS:
+                    continue
+            except ValueError:
+                pass
+        log(f"  Places identity: {biz.get('name')}")
+        ev = run_collector("places_identity", places_identity,
+                           biz.get("name", ""), biz.get("trade", ""), zip_hint="92562")
+        if ev:
+            biz.setdefault("provider_evidence", {})["google_places"] = ev
+            # Neutral corroboration only — no scoring/routing changes in SGW-925.
+            biz["provider_evidence"]["google_places"]["fresh_until"] = (
+                datetime.now(timezone.utc) + timedelta(days=PLACES_EXPIRY_DAYS)).isoformat()
+        done += 1
+        time.sleep(0.5)  # polite rate limit spread
+    return done
 
 
 def clean_name(title):
@@ -1763,6 +1883,89 @@ def _test_qualify_lead():
     assert _elig_cache["businesses"]["corrupt1"]["lead_score"]["tier"] == "Cold", \
         "941/QC fail: corrupt lead_score not replaced"
 
+    # ── SGW-925: Google Places identity enrichment — dormant adapter ──
+    import unittest.mock as _mock
+    _saved_key = globals()["PLACES_API_KEY"]
+    try:
+        # 1) No key → fully inert: no network, no evidence, record untouched.
+        globals()["PLACES_API_KEY"] = ""
+        _inert = {"name": "Inert Co", "trade": "Plumbing",
+                  "site_quality": {"status": "up", "website_score": 2},
+                  "lead_score": {"score": 55, "tier": "Warm"},
+                  "eligibility_state": "eligible"}
+        assert places_identity("Inert Co") is None, "925 fail: no-key places_identity must return None"
+        _before = json.dumps(_inert, sort_keys=True)
+        with _mock.patch.object(urllib.request, "urlopen") as _u:
+            _n = run_places_enrichment({"businesses": {"inert": _inert}})
+        _u.assert_not_called()  # 925 fail: no-key run must not touch the network
+        assert _n == 0, "925 fail: no-key run must check 0 records"
+        assert _inert.get("provider_evidence") is None, "925 fail: no-key run stored evidence"
+        assert json.dumps(_inert, sort_keys=True) == _before, "925 fail: no-key run mutated record"
+        # 2) Key + valid response → evidence stored with the contract fields,
+        #    and deterministic site_quality/lead_score are never overwritten.
+        globals()["PLACES_API_KEY"] = "fake-key-925"
+        _hit = {"name": "Real Firm LLC", "trade": "Accounting",
+                "site_quality": {"status": "up", "confidence": "high", "website_score": 3},
+                "lead_score": {"score": 60, "tier": "Warm"},
+                "eligibility_state": "eligible"}
+        _sq_before = json.dumps(_hit["site_quality"], sort_keys=True)
+        _ls_before = json.dumps(_hit["lead_score"], sort_keys=True)
+        _ok_payload = json.dumps({
+            "status": "OK",
+            "candidates": [{
+                "name": "Real Firm LLC", "formatted_address": "123 Main St, Murrieta, CA 92562",
+                "place_id": "ChIJfake925", "website": "https://realfirm.com",
+                "international_phone_number": "(951) 225-1131",
+                "business_status": "OPERATIONAL",
+            }]}).encode()
+
+        class _FakeResp:
+            def __init__(self, payload):
+                self._payload = payload
+            def read(self):
+                return self._payload
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+
+        with _mock.patch.object(urllib.request, "urlopen", return_value=_FakeResp(_ok_payload)):
+            _n = run_places_enrichment({"businesses": {"hit": _hit}})
+        assert _n == 1, f"925 fail: keyed run checked {_n} records"
+        _ev = _hit["provider_evidence"]["google_places"]
+        for _req in ("provider", "place_id", "observed_at", "confidence", "state", "provenance", "fresh_until"):
+            assert _ev.get(_req), f"925 fail: evidence missing {_req}"
+        assert _ev["provider"] == "google_places" and _ev["provenance"] == "google_places_api"
+        assert _ev["place_id"] == "ChIJfake925" and _ev["phone"] == "(951) 225-1131"
+        # Neutral corroboration only — score/quality never touched by provider data.
+        assert json.dumps(_hit["site_quality"], sort_keys=True) == _sq_before, "925 fail: site_quality overwritten"
+        assert json.dumps(_hit["lead_score"], sort_keys=True) == _ls_before, "925 fail: lead_score overwritten"
+        # Missing fields stay UNKNOWN (absent), never fabricated pain.
+        _sparse_payload = json.dumps({
+            "status": "OK",
+            "candidates": [{"name": "Sparse Co", "business_status": "OPERATIONAL"}]}).encode()
+        _sparse = {"name": "Sparse Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen", return_value=_FakeResp(_sparse_payload)):
+            run_places_enrichment({"businesses": {"sparse": _sparse}})
+        _sev = _sparse["provider_evidence"]["google_places"]
+        assert "phone" not in _sev and "website" not in _sev and "address" not in _sev, \
+            "925 fail: absent fields must stay UNKNOWN (not fabricated)"
+        assert _sev.get("confidence") == "medium", "925 fail: unconfirmed match confidence"
+        # 3) Failure-safe: HTTP error and empty result → None, nothing stored, no crash.
+        _fail = {"name": "Fail Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen",
+                                side_effect=urllib.error.URLError("boom")):
+            _r = run_collector("places_identity", places_identity, "Fail Co", "Plumbing")
+        assert _r is None, "925 fail: provider failure must return None"
+        assert _fail.get("provider_evidence") is None, "925 fail: failure stored evidence"
+        _empty = {"name": "Empty Co", "trade": "Plumbing", "eligibility_state": "eligible"}
+        with _mock.patch.object(urllib.request, "urlopen", return_value=_FakeResp(
+                json.dumps({"status": "ZERO_RESULTS", "candidates": []}).encode())):
+            run_places_enrichment({"businesses": {"empty": _empty}})
+        assert _empty.get("provider_evidence") is None, "925 fail: ZERO_RESULTS stored evidence"
+    finally:
+        globals()["PLACES_API_KEY"] = _saved_key
+
     print("qualify_lead self-check: all assertions passed")
 
 
@@ -2728,6 +2931,10 @@ def main():
                         help="Disable a collector by name (crawl_search, website_check, "
                              "hiring_signals, review_signals, buying_signals). Repeatable. "
                              "SGW-863: proves disabling a source doesn't break the run.")
+    parser.add_argument("--places", action="store_true",
+                        help="SGW-925: Google Places identity enrichment pass over "
+                             "eligible/research records (requires GOOGLE_PLACES_API_KEY; "
+                             "bounded by PLACES_MAX_PER_RUN). No key → skip, exit 0.")
     args = parser.parse_args()
 
     # SGW-938 B6: self-check mode — the previously-dead _test_qualify_lead()
@@ -2741,6 +2948,16 @@ def main():
         cache = load_cache()
         report = generate_coverage_report(cache)
         print(f"Coverage report: {json.dumps(report, indent=2)}")
+        sys.exit(0)
+
+    # SGW-925: standalone Places enrichment pass — cache only, no crawl, no
+    # SearXNG. Without a key this logs one line and exits 0 (zero requests).
+    if args.places:
+        cache = load_cache()
+        n = run_places_enrichment(cache)
+        if n:
+            save_cache(cache)
+        log(f"Places enrichment: {n} records checked")
         sys.exit(0)
 
     # SGW-863: config-gated collectors — disable at runtime via CLI

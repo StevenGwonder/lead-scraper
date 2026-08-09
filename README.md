@@ -62,6 +62,18 @@ The gate re-runs on every cache load, so junk that slips crawl-time checks is
 caught on the next run. `eligibility_state` / `eligibility_reason` are
 persisted per record for debugging.
 
+## Sources (SGW-925)
+
+- **SearXNG (localhost:8888)** is the default and only **required** source —
+  discovery, website audit, hiring/review signals, buying signals.
+- **Google Places identity enrichment is dormant.** It activates only when
+  `GOOGLE_PLACES_API_KEY` is set **and** `--places` is passed (bounded by
+  `PLACES_MAX_PER_RUN`); without a key it logs one line and exits 0 with zero
+  requests. Provider evidence is stored under `provider_evidence` as neutral
+  corroboration only — it is **not** enabled for scoring or routing yet,
+  pending the benchmark comparison required by
+  `docs/source-audit-2026-08.md`. **No provider is locked in.**
+
 ## Website site check (sub-input, not the headline metric)
 
 The 0-5 site check is a sub-input to Digital Footing, not the primary ranking. A great website doesn't disqualify a lead — a business can have a beautiful site and still drown in manual intake.
