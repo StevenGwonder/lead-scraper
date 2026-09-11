@@ -127,6 +127,98 @@ NATIONAL_ENTERPRISE_DOMAINS = {
     "autozone.com", "oreillyauto.com", "advanceautoparts.com", "napaonline.com",
 }
 
+# SGW-942 B3 (2026-09-11 QC): national platforms whose per-location pages are
+# branch/locator pages, not owner-led SMBs. Distinct from
+# NATIONAL_ENTERPRISE_DOMAINS (consumer/retail brands) — these are the
+# franchise, staffing-network and corporate-portal domains that were passing
+# the eligibility gate as "distinct local operating business":
+#   expresspros.com/us-california-moreno-valley  (franchise branch)
+#   manpowerriverside.com                        (ManpowerGroup franchise)
+#   newyorklife.com/agents/find-an-agent/ca/...  (agent locator → name
+#                                                 collapsed to "Agent Directory")
+#   libertycompany.com/locations/california/...  (corporate location page)
+#   utopiamanagement.com/murrieta-property-management (regional branch page)
+# The local operator is not the buyer: no budget authority, no system to
+# integrate. Route to `research`, never `eligible`.
+NATIONAL_BRAND_DOMAINS = {
+    "expresspros.com", "manpower.com", "manpowergroup.com", "adecco.com",
+    "randstadusa.com", "kellyservices.com", "roberthalf.com", "aerotek.com",
+    "newyorklife.com", "northwesternmutual.com", "prudential.com",
+    "metlife.com", "massmutual.com", "principal.com", "guardianlife.com",
+    "libertycompany.com", "utopiamanagement.com", "avantstay.com",
+    "anytimefitness.com", "kellerwilliams.com", "remax.com", "century21.com",
+    "coldwellbanker.com", "berkshirehathawayhs.com", "compass.com",
+    "edwardjones.com", "raymondjames.com", "ameriprise.com", "lpl.com",
+    "hilton.com", "marriott.com", "ihg.com", "wyndham.com", "choicehotels.com",
+    "pizzahut.com", "dominos.com", "jimmyjohns.com", "firehousesubs.com",
+    "servpro.com", "servicemaster.com", "chemdry.com", "stanleysteemer.com",
+    "culligan.com", "mrrooter.com", "roto-rooter.com", "benjaminfranklinplumbing.com",
+    "onehourheatandair.com", "airexperts.com", "ars.com", "goettl.com",
+    "statefarm.com", "allstate.com", "farmers.com", "geico.com",
+    "progressive.com", "libertymutual.com", "usaa.com", "nationwide.com",
+    "travelers.com", "aflac.com", "humana.com", "cigna.com", "aetna.com",
+    "unitedhealthgroup.com", "kaiserpermanente.org", "anthem.com",
+    "huntington.com", "bankofamerica.com", "wellsfargo.com", "chase.com",
+    "citibank.com", "usbank.com", "truist.com", "pnc.com", "schwab.com",
+    "fidelity.com", "vanguard.com", "synchronybank.com", "discover.com",
+    "hrexperts.com", "insperity.com", "paychex.com", "adp.com", "gusto.com",
+    "trinet.com", "justworks.com", "paylocity.com", "paycom.com",
+    "regus.com", "wework.com", "ironmountain.com", "westrock.com",
+    "jll.com", "cbre.com", "colliers.com", "newmark.com", "cushmanwakefield.com",
+    "lennar.com", "drdhorton.com", "pulte.com", "kbhome.com", "taylormorrison.com",
+    "centurycommunities.com", "meritagehomes.com", "sheahomes.com", "tollbrothers.com",
+}
+
+# SGW-942 B3: URL path segments that mark a corporate locator/branch/agent
+# page rather than a business's own site. Checked against the record URL only
+# when the host is a national brand OR the path matches two of these.
+BRANCH_PATH_PATTERNS = (
+    r"/locations?/", r"/agents?/", r"/find-an-agent", r"/branch(es)?/",
+    r"/franchise(s)?/", r"/office(s)?/", r"/stores?/", r"/our-offices",
+    r"/dealer(s)?/", r"/distributors?/", r"/service-area", r"/service-areas",
+)
+
+
+def _is_national_branch(url, name="", own_domains=None):
+    """SGW-942 B3: True when a record is a national brand's per-location page.
+
+    Two independent routes, both requiring the domain to be a known national
+    platform OR the record name to have collapsed into a generic locator
+    title ("Agent Directory") on a brand host. A local franchise with a
+    genuinely distinct brand on its OWN domain (e.g. a locally-named agency
+    running on its own .com) still passes — only the parent platform's
+    per-location pages are gated."""
+    url_l = (url or "").lower()
+    host = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0].split(':')[0].rstrip(".")
+    path = url_l[len(host):] if host else url_l
+    for d in (own_domains or []):
+        d = str(d).lower().lstrip("www.").rstrip(".")
+        if not d:
+            continue
+        if d in NATIONAL_BRAND_DOMAINS:
+            return True
+        if d in NATIONAL_ENTERPRISE_DOMAINS:
+            return True
+    if host in NATIONAL_BRAND_DOMAINS:
+        return True
+    return False
+
+
+def _is_generic_locator_title(name):
+    """SGW-942 B3: page titles that describe a LOCATOR, not a business —
+    'Agent Directory', 'Find an Agent', 'Store Locator'. These are page
+    chrome that survived name cleaning and must never be an `eligible` lead
+    (there is no business behind the name)."""
+    nm = (name or "").strip().lower()
+    if not nm:
+        return False
+    return bool(re.search(
+        r"^(agent|store|office|branch|location|dealer|provider|physician|"
+        r"doctor|attorney|lawyer|therapist|contractor|vendor|supplier)s?\s+"
+        r"(directory|locator|finder|list|listing|search|near)\b", nm)) or \
+        bool(re.search(r"\b(directory|locator|finder|listings?|near me)\b", nm))
+
+
 # SGW-864: cleaned names that are SEO titles, not business brands.
 # These are rejected in the crawl loop and downgraded in the cache sweep.
 GENERIC_BUSINESS_NAME_PATTERNS = [
@@ -203,19 +295,43 @@ def _signal_recency(title, snippet=""):
         return "recent"
     return "unknown"
 
-def _evidence_source_kind(url):
+def _evidence_source_kind(url, own_domains=None):
     """SGW-865: classify where an evidence source lives.
     own_site = the business's own domain (strongest); job_board = aggregator
-    (weak); other = anything else (medium)."""
+    (weak); review_site = review platform; other = unknown third party.
+
+    SGW-942 B2 (2026-09-11 QC): this used to default to "own_site" for any
+    host it didn't recognise, so upwork.com / instawork.com / plumbingjobs.org
+    / starofservice.us hits were stamped own_site and then scored +25 as
+    "hiring for an automatable role — on own site". 133 of 156 own_site hiring
+    signals in the live cache were not on the business's own domain; the
+    single top lead's entire score came from a ZipRecruiter search page.
+    Default must be the WEAK class, never the strong one — `other` is
+    explicitly non-own and is not credited as verified hiring evidence."""
     url_l = (url or "").lower()
-    domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0]
+    domain = re.sub(r'https?://(www\.)?', '', url_l).split('/')[0].split(':')[0].rstrip(".")
     if any(s in domain for s in ("ziprecruiter", "indeed", "linkedin", "careerbuilder",
-                                  "monster", "glassdoor", "lawcrossing", "usajobs")):
+                                  "monster", "glassdoor", "lawcrossing", "usajobs",
+                                  "upwork", "instawork", "ziprecruiter", "simplyhired",
+                                  "snagajob", "dice.com", "wellfound", "flexjobs",
+                                  "plumbingjobs", "hvacjobs", "jobsoom", "jobrapido",
+                                  "talent.com", "careerjet", "jooble", "jobs.com",
+                                  "jobs2careers", "recruiter.com", "workable",
+                                  "greenhouse.io", "lever.co", "bamboohr")):
         return "job_board"
     if any(s in domain for s in ("yelp", "google.com", "bbb", "trustpilot",
-                                  "glassdoor", "wallethub", "consumeraffairs")):
+                                  "glassdoor", "wallethub", "consumeraffairs",
+                                  "yellowpages", "mapquest", "chamberofcommerce",
+                                  "manta", "angi", "thumbtack", "nextdoor",
+                                  "birdeye", "tripadvisor", "foursquare")):
         return "review_site"
-    return "own_site"
+    if own_domains:
+        ods = [str(d).lower().lstrip("www.").rstrip(".") for d in own_domains]
+        if any(domain == d or domain.endswith("." + d) for d in ods if d):
+            return "own_site"
+        return "other"
+    # No own domain on the record — we cannot claim it is theirs.
+    return "other"
 
 def _distinctive_name_tokens(name):
     """Return name tokens specific enough to match a business in search results.
@@ -306,10 +422,20 @@ def assess_eligibility(url, name="", trade="", phones=None, own_domains=None):
     #    a title with no brand identity is not a business at all.
     if _is_directory_record(url, name):
         return "rejected", "directory/SEO listing"
-    # 5. No contact path captured yet → can't be owner-facing.
+    # 5. National brand / franchise / corporate branch page — the local
+    #    operator is not the buyer (no budget authority, no system to
+    #    integrate). SGW-942 B3: expresspros.com/us-california-*, Manpower
+    #    franchise sites, newyorklife agent locators, Liberty Company /
+    #    Utopia regional pages were all passing as "eligible".
+    if _is_national_branch(url, name, own_domains):
+        return "research", "national brand / franchise branch page (parent platform is not the prospect)"
+    # 5b. A name that is locator chrome, not a business ("Agent Directory").
+    if _is_generic_locator_title(name):
+        return "research", "locator/directory page title — no business behind the name"
+    # 6. No contact path captured yet → can't be owner-facing.
     if not phones:
         return "research", "no verified contact path"
-    # 6. No own domain AND no directory-domain list → nothing to verify against.
+    # 7. No own domain AND no directory-domain list → nothing to verify against.
     if not own_domains and not url:
         return "research", "no domain/identity to verify"
     return "eligible", "distinct local operating business"
@@ -889,6 +1015,24 @@ def is_aggregator(title, url):
     return False
 
 
+# SGW-942 B1c: NPAs that are service codes or were never assigned to a
+# geographic/valid carrier. Shape-valid but never a real business line.
+UNASSIGNED_AREA_CODES = {
+    "200", "211", "222", "311", "333", "411", "444", "511", "555",
+    "611", "666", "711", "777", "811", "911", "999", "000", "111",
+}
+# Classic placeholder constants that appear in test data / template code.
+# SGW-942 B1c: the INT32-max FAMILY, not just the exact value — Policygenius
+# was serving (214) 748-3645 and (214) 748-3646, which are the same
+# 214748364x placeholder block, one digit off the canonical constant.
+KNOWN_PLACEHOLDER_NUMBERS = {
+    "2147483647",   # INT32 max — ubiquitous in sample data
+    "1234567890", "0123456789", "1234567891", "0987654321",
+}
+# Prefix block for the INT32-max family (214 748 364x).
+PLACEHOLDER_PREFIXES = ("214748364",)
+
+
 def _normalize_phone(raw):
     """SGW-938 B1: canonical NANP phone validator/normalizer.
 
@@ -896,7 +1040,20 @@ def _normalize_phone(raw):
     cache sweep) MUST route through this one function. Returns the
     normalized '(XXX) XXX-XXXX' form for a valid US number, else None.
     Rules: 10 digits (or 11 starting with '1'); area code 200-989 and not
-    N11 (411/911); exchange not all-zero (000) and not reserved test (555)."""
+    N11 (411/911); exchange not all-zero (000) and not reserved test (555).
+
+    SGW-942 B1c (2026-09-11 QC): NANP shape is necessary but not sufficient.
+    Live cache contained numbers that satisfy every shape rule yet are not
+    real: (666) 666-6666, (333) 333-3333, (444) 444-4444, (214) 748-3647
+    (INT32 max, a classic placeholder), (555) 967-1920. Three extra rules:
+      1. UNASSIGNED AREA CODES — 200/211/222/311/333/411/444/511/555/611/
+         666/711/777/811/911/999 are service codes or never-assigned NPAs.
+      2. REPEATED DIGITS — a number with <=2 distinct digits is filler
+         (4444444444), never a real line.
+      3. KNOWN PLACEHOLDERS — 2147483647, 1234567890, 0123456789.
+    Deliberately NOT rejected: repeated PAIRS and endings like xxx-8888 or
+    exchange 444/888 — real businesses hold those constantly, and a
+    too-eager rule here silently deletes live contact paths."""
     if not raw:
         return None
     digits = re.sub(r"\D", "", str(raw))
@@ -908,6 +1065,20 @@ def _normalize_phone(raw):
     exchange = int(digits[3:6])
     if not (200 <= ac <= 989 and ac % 100 != 11) or exchange in (0, 555):
         return None
+    # SGW-942 B1c: NANP forbids an exchange beginning with 0 or 1. Missing
+    # this let (857) 142-8571 and (394) 095-7316 pass as valid, and those
+    # phantom numbers then acted as "shared identity" between unrelated
+    # businesses in the duplicate merge.
+    if digits[3] in ("0", "1"):
+        return None
+    if digits[:3] in UNASSIGNED_AREA_CODES:
+        return None
+    if len(set(digits)) <= 2:
+        return None
+    if digits in KNOWN_PLACEHOLDER_NUMBERS:
+        return None
+    if any(digits.startswith(pre) for pre in PLACEHOLDER_PREFIXES):
+        return None
     return f"({digits[:3]}) {digits[3:6]}-{digits[6:]}"
 
 
@@ -916,11 +1087,38 @@ def extract_phones(text):
     Research 2026-08 / SGW-938 B1: NANP validation via _normalize_phone —
     area code must be real (200-989, not starting with 0/1), exchange must
     not be all-zeros or a reserved test prefix (555). Crawler garbage like
-    (100) 091-4084 or (178) 137-3717 must not count as a contact path."""
-    # Match: (951) 225-1131, 951-225-1131, 951.225.1131, 951 225 1131, 9512251131
-    phones = re.findall(r"\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}", text)
+    (100) 091-4084 or (178) 137-3717 must not count as a contact path.
+
+    SGW-942 B1b (2026-09-11 QC): NANP validity is NOT sufficient on raw HTML.
+    A bare 10-digit run is matched anywhere in the byte stream, so framework
+    identifiers get read as phone numbers — this shipped as verified contact
+    evidence:
+      - Wix CSS class  'StylableButton2545352419__root' → (254) 535-2419
+      - Wix site UUID  'content="d0a90ec0-...-5875261850ad"' → (587) 526-1850
+    Both passed NANP because 254 and 587 are real area codes. Rule: an
+    UNSEPARATED 10-digit run is only accepted when it is NOT embedded in a
+    longer alphanumeric token (checked on BOTH sides) and does not follow a
+    version/hash/UUID separator. Separated forms — '(951) 440-3498',
+    '951-440-3498', '951.440.3498' — are unambiguous and always accepted."""
+    # Separated forms first — these are what a human actually reads on a page.
+    separated = [m.group(0) for m in re.finditer(
+        r"(?:\(\d{3}\)|\b\d{3})[-.\s]\d{3}[-.\s]\d{4}\b", text)]
+    # Bare 10-digit runs, admitted only when genuinely standalone.
+    bare = []
+    for m in re.finditer(r"\d{10}", text):
+        s, e = m.start(), m.end()
+        before = text[s - 1] if s > 0 else ""
+        after = text[e] if e < len(text) else ""
+        if before.isalnum() or after.isalnum():
+            continue          # embedded in a longer token (CSS class / UUID)
+        # NB: guard the empty string — `"" in "-_./"` is True, which would
+        # reject every number sitting at the start/end of the text.
+        if (before and before in "-_./") or (after and after in "-_./"):
+            continue          # hash / UUID / version-fragment neighbour
+        bare.append(m.group(0))
+    candidates = separated + bare
     seen, result = set(), []
-    for p in phones:
+    for p in candidates:
         formatted = _normalize_phone(p)
         if formatted and formatted not in seen:
             seen.add(formatted)
@@ -1312,7 +1510,11 @@ def search_hiring_signals(biz_name, cache_key, cache):
                 "url": r.get("url", ""),
                 "observed_at": datetime.now(timezone.utc).isoformat(),
                 "recency": recency,
-                "source_kind": _evidence_source_kind(r.get("url", "")),
+                # SGW-942 B2: pass the record's own domains so an unrecognised
+                # third-party host classifies as `other`, not `own_site`.
+                "source_kind": _evidence_source_kind(
+                    r.get("url", ""),
+                    (cache.get("businesses", {}).get(cache_key, {}) or {}).get("own_domains")),
             })
         if hiring_found:
             break
@@ -1376,7 +1578,11 @@ def search_review_signals(biz_name, cache_key, cache):
                 "url": r.get("url", ""),
                 "complaints": complaints,
                 "observed_at": datetime.now(timezone.utc).isoformat(),
-                "source_kind": _evidence_source_kind(r.get("url", "")),
+                # SGW-942 B2: same provenance rule as hiring signals — an
+                # unrecognised host is `other`, never `own_site`.
+                "source_kind": _evidence_source_kind(
+                    r.get("url", ""),
+                    (cache.get("businesses", {}).get(cache_key, {}) or {}).get("own_domains")),
             })
     
     # Store in cache
@@ -1458,14 +1664,14 @@ def qualify_lead(biz, sq):
             reasons.append(f"hiring for an automatable role — on own site (+{GB['automatable_role']})")
         else:
             gb += GB["automatable_role_weak"]
-            reasons.append(f"hiring for an automatable role — aggregator echo only (+{GB['automatable_role_weak']})")
+            reasons.append(f"hiring for an automatable role — no own-site proof (+{GB['automatable_role_weak']})")
     elif hiring_signals:
         if strong_hiring:
             gb += GB["generic_hiring"]
             reasons.append(f"generic hiring signal — on own site (+{GB['generic_hiring']})")
         else:
             gb += GB["generic_hiring_weak"]
-            reasons.append(f"generic hiring signal — aggregator echo only (+{GB['generic_hiring_weak']})")
+            reasons.append(f"generic hiring signal — no own-site proof (+{GB['generic_hiring_weak']})")
     elif verified:
         # Trade prior: operational complexity proxy — only when we read the site (T13)
         if trade in ADMIN_TRADES:
@@ -2030,7 +2236,15 @@ def _test_qualify_lead():
     assert _signal_recency("Now Hiring Receptionist") == "unknown", "SGW-865 fail: undated should be unknown"
     assert _evidence_source_kind("https://www.ziprecruiter.com/Jobs/Bookkeeping") == "job_board", "SGW-865 fail: ziprecruiter not job_board"
     assert _evidence_source_kind("https://www.yelp.com/biz/singleton-smith") == "review_site", "SGW-865 fail: yelp not review_site"
-    assert _evidence_source_kind("https://singletonsmith.com/careers") == "own_site", "SGW-865 fail: own site not own_site"
+    # SGW-942 B2: own_site now requires the host to actually BE the business's
+    # own domain — the old assertion passed an arbitrary host with no
+    # own_domains and demanded own_site, which is precisely the defect that
+    # let aggregator pages score as first-party evidence.
+    assert _evidence_source_kind("https://singletonsmith.com/careers",
+                                 ["singletonsmith.com"]) == "own_site", \
+        "SGW-942 fail: own domain not classified own_site"
+    assert _evidence_source_kind("https://singletonsmith.com/careers") == "other", \
+        "SGW-942 fail: host with no own_domains must not default to own_site"
 
     # SGW-866: dimension model present + gap-stacking can't reach Hot
     r8 = qualify_lead({"trade": "Accounting", "phones": ["(951) 555-0001"],
@@ -2077,6 +2291,110 @@ def _test_qualify_lead():
     assert extract_phones("Call (100) 091-4084") == [], "research fail: invalid area code must be rejected"
     assert extract_phones("Call (951) 225-1131") == ["(951) 225-1131"], "research fail: real phone rejected"
     assert extract_phones("Call (178) 137-3717") == [], "research fail: 178 area code must be rejected"
+
+    # ── SGW-942 B1b: framework identifiers must never read as phones ──
+    # Real shipped defects (2026-09-11 QC): a Wix CSS class and a Wix site
+    # UUID were extracted as NANP-valid phone numbers and presented to the
+    # user as "verified contact paths".
+    assert extract_phones(".StylableButton2545352419__root{-archetype:box}") == [], \
+        "SGW-942 B1b fail: Wix CSS class read as a phone number"
+    assert extract_phones('content="d0a90ec0-bf12-465a-88ee-5875261850ad"') == [], \
+        "SGW-942 B1b fail: Wix site UUID read as a phone number"
+    assert extract_phones("build-2024.0915091225.js") == [], \
+        "SGW-942 B1b fail: version/hash fragment read as a phone number"
+    # A number at the very start/end of the text must still be found.
+    assert extract_phones("9512251131") == ["(951) 225-1131"], \
+        "SGW-942 B1b fail: leading bare number rejected"
+    assert extract_phones("Tel: (951) 440-3498") == ["(951) 440-3498"], \
+        "SGW-942 B1b fail: parenthesised number rejected"
+
+    # ── SGW-942 B2: provenance must default to WEAK, never own_site ──
+    assert _evidence_source_kind("https://www.upwork.com/freelance-jobs/bookkeeping/",
+                                 ["superiorvirtualaccounting.com"]) == "job_board", \
+        "SGW-942 B2 fail: upwork stamped as own_site"
+    assert _evidence_source_kind("https://www.instawork.com/jobs/x", ["protechjobs.com"]) == "job_board", \
+        "SGW-942 B2 fail: instawork stamped as own_site"
+    assert _evidence_source_kind("https://plumbingjobs.org/x", ["encoreplumbing.com"]) == "job_board", \
+        "SGW-942 B2 fail: plumbingjobs.org stamped as own_site"
+    assert _evidence_source_kind("https://www.ziprecruiter.com/Jobs/X", ["x.com"]) == "job_board", \
+        "SGW-942 B2 fail: ziprecruiter not job_board"
+    assert _evidence_source_kind("https://singletonsmith.com/careers", ["singletonsmith.com"]) == "own_site", \
+        "SGW-942 B2 fail: genuine own-site signal not own_site"
+    assert _evidence_source_kind("https://singletonsmith.com/careers", ["other.com"]) == "other", \
+        "SGW-942 B2 fail: foreign host stamped own_site"
+    assert _evidence_source_kind("https://some-unknown-host.example/x", None) == "other", \
+        "SGW-942 B2 fail: unknown host with no own_domains stamped own_site"
+
+    # ── SGW-942 B3: national branches and locator titles are not eligible ──
+    assert _is_national_branch("https://www.expresspros.com/us-california-moreno-valley",
+                               "Express Employment Professionals", ["expresspros.com"]) is True, \
+        "SGW-942 B3 fail: Express franchise branch passed as local business"
+    assert _is_national_branch("https://www.newyorklife.com/agents/find-an-agent/ca/temecula",
+                               "Agent Directory", ["newyorklife.com"]) is True, \
+        "SGW-942 B3 fail: NYL agent locator passed as local business"
+    assert _is_national_branch("https://libertycompany.com/locations/california/murrieta",
+                               "Liberty Company", ["libertycompany.com"]) is True, \
+        "SGW-942 B3 fail: corporate location page passed as local business"
+    assert _is_national_branch("https://murrietaplumbing.com", "Murrieta Plumbing",
+                               ["murrietaplumbing.com"]) is False, \
+        "SGW-942 B3 fail: real local business flagged as national branch"
+    assert _is_generic_locator_title("Agent Directory") is True, \
+        "SGW-942 B3 fail: locator chrome accepted as a business name"
+    assert _is_generic_locator_title("Reid & Hellyer") is False, \
+        "SGW-942 B3 fail: real firm name flagged as locator chrome"
+    _st, _rs = assess_eligibility("https://www.expresspros.com/us-california-moreno-valley",
+                                  "Express Employment Professionals", "Recruiting",
+                                  ["(951) 823-0023"], ["expresspros.com"])
+    assert _st == "research", f"SGW-942 B3 fail: national branch was '{_st}' not 'research'"
+    # ── SGW-942 B1c: shape-valid but fake numbers ──
+    for _fake in ("(666) 666-6666", "(333) 333-3333", "(444) 444-4444",
+                  "(214) 748-3647", "(555) 967-1920", "(200) 951-7308",
+                  "(777) 714-2857", "(999) 519-5000", "(111) 222-3333",
+                  "(857) 142-8571", "(394) 095-7316"):
+        assert _normalize_phone(_fake) is None, \
+            f"SGW-942 B1c fail: fake/placeholder number accepted: {_fake}"
+    # ...and real numbers that merely LOOK patterned must survive.
+    for _real in ("(951) 440-3498", "(951) 444-1404", "(865) 935-8888",
+                  "(505) 293-3333", "(951) 222-2910", "(800) 222-4057",
+                  "(951) 926-6200"):
+        assert _normalize_phone(_real) == _real, \
+            f"SGW-942 B1c fail: real number wrongly rejected: {_real}"
+
+    # ── SGW-942 B1c: the duplicate merge must be conservative ──
+    # A shared trade word is NOT identity — these two are different firms.
+    _plumb_a = {"name": "Plumbing Services", "phones": ["(951) 370-1578"],
+                "own_domains": ["plumbermurrieta.plumbing"]}
+    _plumb_b = {"name": "Encore Plumbing & Air", "phones": ["(951) 370-1578"],
+                "own_domains": ["encoreplumbingtemecula.com"]}
+    assert _same_business(_plumb_a, _plumb_b) is False, \
+        "SGW-942 fail: distinct firms sharing a trade word were merged"
+    # Genuine duplicate: same phone AND same distinctive name tokens.
+    _dup_a = {"name": "Taxes and Accounting, CPA -Copeland, Benner & Associates",
+              "phones": ["(951) 699-1040"], "own_domains": ["copelandbennercpas.com"]}
+    _dup_b = {"name": "Copeland, Miranda & Benner, CPAs An Accountancy Corporation",
+              "phones": ["(951) 699-1040"], "own_domains": ["vistacpa.com"]}
+    assert _same_business(_dup_a, _dup_b) is True, \
+        "SGW-942 fail: genuine duplicate not detected"
+    # Different phone → never the same business, however similar the name.
+    _other = dict(_dup_b); _other["phones"] = ["(951) 999-1234"]
+    assert _same_business(_dup_a, _other) is False, \
+        "SGW-942 fail: records with different phones merged"
+    # The merge must never delete a phone number.
+    _mc = {"businesses": {
+        "a": {"name": "Taxes and Accounting, CPA -Copeland, Benner & Associates",
+              "phones": ["(951) 699-1040"], "own_domains": ["copelandbennercpas.com"],
+              "site_quality": {"status": "up", "confidence": "high", "phones": ["(951) 699-1040"]}},
+        "b": {"name": "Copeland, Miranda & Benner, CPAs An Accountancy Corporation",
+              "phones": ["(951) 699-1040"], "own_domains": ["vistacpa.com"],
+              "site_quality": {"status": "up", "confidence": "high", "phones": ["(951) 699-1040"]}},
+    }}
+    _n = merge_duplicate_records(_mc)
+    assert _n == 1, f"SGW-942 fail: expected 1 merge, got {_n}"
+    _survivors = [v for v in _mc["businesses"].values()
+                  if not v.get("_retired")]
+    assert len(_survivors) == 1 and "(951) 699-1040" in _survivors[0]["phones"], \
+        "SGW-942 fail: merge dropped the shared phone number"
+
     p = pitch_for({"trade": "Accounting", "review_negative": True})
     assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
     p2 = pitch_for({"trade": "Law Office"})
@@ -2672,7 +2990,23 @@ def load_cache():
                 cutoff = cutoff_hot if tier in ("Hot", "Warm") else cutoff_cold
                 return v.get("last_seen", "") > cutoff
 
-            cache["businesses"] = {k: v for k, v in cache.get("businesses", {}).items() if _keep(v)}
+            # SGW-942: NEVER let a data-quality pass destroy a lead. If a
+            # record was demoted to Cold by our own repair logic rather than
+            # by new evidence, keep it — the 7-day Cold cutoff would otherwise
+            # delete it (this is exactly how Superior Virtual Bookkeeping was
+            # lost: a phone-purge dropped its score, flipped it Cold, and the
+            # sweep then removed it). Any record carrying a repair marker is
+            # exempt from retention pruning.
+            _REPAIR_MARKERS = ("phones_superseded", "phones_dropped_shared",
+                               "contact_reverified_at", "restored_from",
+                               "_retired", "merged_from", "directory_record")
+            def _protected(v):
+                return any(k in v for k in _REPAIR_MARKERS)
+
+            cache["businesses"] = {
+                k: v for k, v in cache.get("businesses", {}).items()
+                if _keep(v) or _protected(v)
+            }
             # SGW-864: sweep — any cached record that is now identifiable as a
             # directory/SEO listing gets demoted to Cold + zeroed signals so it
             # stops polluting the top of the report until re-crawled properly.
@@ -2710,6 +3044,32 @@ def load_cache():
                     cleaned_sq = [p for p in sq["phones"] if _normalize_phone(p)]
                     if len(cleaned_sq) != len(sq["phones"]):
                         sq["phones"] = cleaned_sq
+            # SGW-942 B1b (revised 2026-09-11): the first cut of this rule was
+            # WRONG — it deleted any number appearing on >1 record, which
+            # stripped genuinely-published numbers (Superior Virtual's real
+            # (951) 440-3498 was published in its own site footer and on a
+            # JSON-LD telephone field). A shared number means two records may
+            # be the SAME business; it does not mean the number is fake.
+            # Correct handling: when records share a number, MERGE the
+            # duplicates into the richest record and retire the others.
+            # Never delete the number itself.
+            merged = merge_duplicate_records(cache)
+            if merged:
+                log(f"duplicate records merged: {merged}")
+            # SGW-942 B2: re-stamp hiring/review signal provenance. Cached
+            # signals written before the classifier fix carry own_site for
+            # aggregator hosts; re-classify so scoring stops crediting them.
+            for biz in cache["businesses"].values():
+                ods = biz.get("own_domains") or []
+                for key in ("hiring_signals", "review_signals"):
+                    for sig in (biz.get(key) or []):
+                        if not isinstance(sig, dict):
+                            continue
+                        sig["source_kind"] = _evidence_source_kind(sig.get("url", ""), ods)
+                if biz.get("hiring_signals") or biz.get("review_signals"):
+                    # score depends on source_kind — recompute on next qualify
+                    if isinstance(biz.get("lead_score"), dict):
+                        biz["lead_score"] = qualify_lead(biz, biz.get("site_quality"))
             # SGW-941: eligibility gate — after identity re-key + phone purge so
             # the gate sees resolved names and clean contact paths. Government,
             # locator/job subdomains, national-enterprise branches, and
@@ -3233,12 +3593,15 @@ def generate_html_report(cache, zip_code="92562", prev_run=None):
         tier = ls.get("tier", "Cold")
         reasons = ls.get("reasons", [])
         domain = biz.get("own_domains", ["?"])[0]
-        phone = (biz.get("phones") or [""])[0]
+        # SGW-942 B1b: the daily report's click-to-dial link is a contact path
+        # claim — render the verified number, never the raw contaminated list.
+        _vphones, _vemails = _weekly_contact_paths(biz)
+        phone = (_vphones or [""])[0]
         sq = biz.get("site_quality") or {}
         ws = sq.get("website_score", -1)
         status = sq.get("status", "unknown")
         platform = sq.get("platform", "")
-        emails = biz.get("emails", []) or sq.get("emails", [])
+        emails = _vemails or biz.get("emails", []) or sq.get("emails", [])
         new_badge = ' <span class="badge badge-new">NEW</span>' if biz.get("_new") else ''
 
         # Phase 2: Build platform/tool summary for info line
@@ -3478,12 +3841,37 @@ def send_report(cache, zip_code, now, prev_run=None):
 WEEKLY_BRIEF_MAX = 10  # SGW-926 hard cap — max 10 priority prospects
 
 
+def _weekly_contact_paths(biz):
+    """SGW-942 B1b: verified contact paths ONLY.
+
+    The brief used to render `biz["phones"][0]` as "primary", which is the
+    contaminated list — the top lead's "primary" number was a Wix CSS class
+    fragment and its real (951) number sat unused in backup. Prefer the
+    high-confidence own-site read; fall back to the record list only when no
+    site read exists, and label the provenance so the reader knows which it
+    is. Never render a number the site never published."""
+    sq = biz.get("site_quality") or {}
+    verified = []
+    if sq.get("status") == "up" and sq.get("confidence") == "high":
+        verified = [p for p in (sq.get("phones") or []) if _normalize_phone(p)]
+    if not verified:
+        verified = [p for p in (biz.get("phones") or []) if _normalize_phone(p)]
+    emails = []
+    for e in (sq.get("emails") or []) + (biz.get("emails") or []):
+        e = str(e).strip().lower()
+        if "@" in e and len(e) < 80 and re.fullmatch(r"[^@\s]+@[^@\s]+\.[a-z]{2,}", e) \
+                and e not in emails:
+            emails.append(e)
+    return verified, emails
+
+
 def _weekly_has_evidence(biz):
     """True when the record carries at least one deterministic evidence
     anchor (phone, site automation gap, hiring or review signal). Prevents
     shell records with nothing observed from filling the brief."""
     sq = biz.get("site_quality") or {}
-    return bool(biz.get("phones") or sq.get("automation_gaps")
+    phones, emails = _weekly_contact_paths(biz)
+    return bool(phones or emails or sq.get("automation_gaps")
                 or biz.get("hiring_signals") or biz.get("hiring_role_match")
                 or biz.get("review_signals") or biz.get("review_negative"))
 
@@ -3493,7 +3881,7 @@ def _weekly_evidence_signals(biz):
     — only what was actually captured; never owner/revenue/unverified."""
     sigs = []
     sq = biz.get("site_quality") or {}
-    phones = biz.get("phones") or []
+    phones, _emails = _weekly_contact_paths(biz)
     if phones:
         sigs.append((f"phone contact captured ({phones[0]})", "phones"))
     if biz.get("own_domains"):
@@ -3633,11 +4021,14 @@ def _weekly_fallback_draft(biz):
 
 def _weekly_next_action(biz):
     """What is due NEXT: action / date / channel, from verified contact
-    paths only."""
-    phones = biz.get("phones") or []
+    paths only. SGW-942 B1b: email-only records get an email action rather
+    than being told to phone a number that isn't theirs."""
+    phones, emails = _weekly_contact_paths(biz)
     domains = biz.get("own_domains") or []
     if phones:
         return ("Call", "within 7 days (next weekly cycle)", f"phone — {phones[0]}")
+    if emails:
+        return ("Email", "within 7 days (next weekly cycle)", f"email — {emails[0]}")
     if domains:
         return ("Submit via website contact form", "within 7 days (next weekly cycle)",
                 f"website — {domains[0]}")
@@ -3648,8 +4039,11 @@ def _weekly_missing(biz):
     """Missing evidence / reason to skip — deterministic, from what is absent."""
     missing = []
     sq = biz.get("site_quality") or {}
-    if not biz.get("phones"):
-        missing.append("no captured phone — contact path unverified")
+    phones, emails = _weekly_contact_paths(biz)
+    if not phones and not emails:
+        missing.append("no verified phone or email — contact path unverified")
+    elif not phones:
+        missing.append("no phone published on site — email only")
     if not biz.get("hiring_checked"):
         missing.append("no hiring-signal check")
     if not biz.get("review_checked"):
@@ -3725,12 +4119,14 @@ def _weekly_card_html(biz, idx):
         hyp = f"hypothesis: {hyp}"
     impact = rev.get("why_now") if use_ai and rev.get("why_now") else _weekly_impact(biz)
 
-    phones = biz.get("phones") or []
+    phones, emails = _weekly_contact_paths(biz)
     domains = biz.get("own_domains") or []
     if phones:
         contacts = f"primary: {phones[0]}"
         if len(phones) > 1:
             contacts += f" · backup: {phones[1]}"
+    elif emails:
+        contacts = f"email: {emails[0]} (no phone published on site)"
     elif domains:
         contacts = f"website: {domains[0]} (no phone captured)"
     else:
@@ -3867,6 +4263,240 @@ def signal_sweep_candidates(cache):
     return candidates
 
 
+# SGW-942 B1c: tokens that describe a TRADE or a legal form, not an identity.
+# Two different firms sharing "plumbing" or "insurance" are NOT the same
+# business — using these as identity caused the duplicate merge to eat
+# Encore Plumbing & Air and Hawkguard Insurance. Names are only allowed to
+# prove sameness via tokens that actually name the business.
+TRADE_IDENTITY_STOPWORDS = {
+    "plumbing", "plumber", "plumbers", "electric", "electrical", "electrician",
+    "hvac", "heating", "cooling", "air", "conditioning", "roofing", "roofer",
+    "roofers", "cleaning", "cleaners", "carpet", "handyman", "landscaping",
+    "landscape", "tree", "removal", "painting", "painter", "painters",
+    "insurance", "insured", "agency", "agencies", "agent", "agents",
+    "accounting", "accountant", "accountants", "bookkeeping", "bookkeeper",
+    "tax", "taxes", "cpa", "cpas", "law", "lawyer", "lawyers", "attorney",
+    "attorneys", "legal", "consulting", "consultant", "consultants",
+    "recruiting", "staffing", "employment", "property", "management",
+    "realty", "real", "estate", "repair", "repairs", "service", "services",
+    "company", "companies", "inc", "llc", "corp", "group", "associates",
+    "solutions", "firm", "office", "offices", "business", "enterprise",
+    "enterprises", "industries", "partners", "professionals", "network",
+    "systems", "technology", "technologies", "murrieta", "temecula",
+    "wildomar", "menifee", "riverside", "california", "local", "quality",
+    "premier", "elite", "professional", "affordable", "trusted", "family",
+    "tire", "auto", "automotive", "mechanic", "shop", "smog", "drain",
+    "sewer", "rooter", "floor", "floors", "restoration", "water", "fire",
+    "damage", "pest", "termite", "pool", "solar", "garage", "door", "doors",
+    "window", "windows", "glass", "flooring", "cabinet", "cabinets",
+    "moving", "movers", "storage", "notary", "title", "escrow", "lending",
+    "mortgage", "loan", "loans", "financial", "wealth", "retirement",
+    "health", "life", "home", "auto", "commercial", "personal", "general",
+    "liability", "workers", "compensation", "medicare", "renters", "rental",
+}
+
+
+def _record_richness(biz):
+    """Merge heuristic: how much real evidence a record carries. The richest
+    record wins and absorbs the others — we never merge into an emptier one
+    and lose data."""
+    sq = biz.get("site_quality") or {}
+    return (
+        (2 if sq.get("status") == "up" and sq.get("confidence") == "high" else 0)
+        + (1 if (biz.get("lead_score") or {}).get("score") else 0)
+        + (1 if biz.get("own_domains") else 0)
+        + len(sq.get("automation_gaps") or []) * 0.1
+        + (0.5 if biz.get("hiring_signals") else 0)
+        + (0.5 if biz.get("review_signals") else 0)
+        + (0.5 if biz.get("snippet") else 0)
+    )
+
+
+def _same_business(a, b):
+    """True when two records are the same real-world business.
+
+    Deliberately conservative: a shared phone ALONE is not enough (a shared
+    switchboard number can serve two genuinely separate firms at one address),
+    so we require the phone to be corroborated by a shared identity signal —
+    same registrable domain, or a strongly overlapping distinctive name
+    token set. This is the guard that stops the merge from eating real
+    distinct leads."""
+    a_sq, b_sq = a.get("site_quality") or {}, b.get("site_quality") or {}
+    a_ph = {p for p in ((a.get("phones") or []) + (a_sq.get("phones") or []))
+            if _normalize_phone(p)}
+    b_ph = {p for p in ((b.get("phones") or []) + (b_sq.get("phones") or []))
+            if _normalize_phone(p)}
+    if not (a_ph & b_ph):
+        return False
+    a_dom = {str(d).lower().lstrip("www.") for d in (a.get("own_domains") or []) if d}
+    b_dom = {str(d).lower().lstrip("www.") for d in (b.get("own_domains") or []) if d}
+    if a_dom and b_dom and (a_dom & b_dom):
+        return True
+    # Name-token route. Trade words are NOT identity: "Plumbing Services" and
+    # "Encore Plumbing & Air" are different firms that share the token
+    # "plumbing". Strip the generic ICP vocabulary before comparing, and
+    # require the overlap to be a genuinely distinctive token.
+    a_tok = set(_distinctive_name_tokens(a.get("name", ""))) - TRADE_IDENTITY_STOPWORDS
+    b_tok = set(_distinctive_name_tokens(b.get("name", ""))) - TRADE_IDENTITY_STOPWORDS
+    if not a_tok or not b_tok:
+        return False
+    overlap = a_tok & b_tok
+    if len(overlap) >= 2:
+        return True
+    if len(overlap) == 1 and min(len(a_tok), len(b_tok)) == 1:
+        return True
+    return False
+
+
+def merge_duplicate_records(cache):
+    """SGW-942: collapse records that are the same business into one.
+
+    Replaces the earlier (and wrong) rule that deleted any phone number
+    appearing on more than one record. Sharing a number is evidence the
+    records are duplicates, not evidence the number is bogus — Superior
+    Virtual's real published number got deleted by that rule.
+
+    Merges only when `_same_business` holds (shared phone PLUS shared domain
+    or overlapping distinctive name tokens). The richer record absorbs the
+    others: missing fields are filled, signals are unioned, and the retired
+    keys are recorded under `merged_from` so nothing is lost silently.
+    Returns the number of records retired."""
+    biz = cache.get("businesses") or {}
+    by_phone = defaultdict(list)
+    for key, rec in biz.items():
+        sq = rec.get("site_quality") or {}
+        for p in set((rec.get("phones") or []) + (sq.get("phones") or [])):
+            n = _normalize_phone(p)
+            if n:
+                by_phone[n].append(key)
+
+    retire = {}   # key -> winner key
+    for phone, keys in by_phone.items():
+        live = [k for k in keys if k not in retire]
+        if len(live) < 2:
+            continue
+        # Richest first — the winner is the record with the most evidence.
+        live.sort(key=lambda k: -_record_richness(biz[k]))
+        winner = live[0]
+        for other in live[1:]:
+            if other in retire:
+                continue
+            if _same_business(biz[winner], biz[other]):
+                retire[other] = winner
+
+    if not retire:
+        return 0
+
+    for loser, winner in retire.items():
+        w, l = biz.get(winner), biz.get(loser)
+        if not w or not l:
+            continue
+        # Fill gaps on the winner; never overwrite richer evidence.
+        for field in ("snippet", "trade", "url"):
+            if not w.get(field) and l.get(field):
+                w[field] = l[field]
+        for field in ("own_domains", "emails", "dir_domains"):
+            merged_vals = list(w.get(field) or [])
+            for v in (l.get(field) or []):
+                if v not in merged_vals:
+                    merged_vals.append(v)
+            if merged_vals:
+                w[field] = merged_vals
+        # Phones: keep the number that made them duplicates.
+        w_ph = list(w.get("phones") or [])
+        for p in (l.get("phones") or []):
+            if p not in w_ph and _normalize_phone(p):
+                w_ph.append(p)
+        w["phones"] = w_ph
+        # Union the signal lists.
+        for field in ("hiring_signals", "review_signals"):
+            merged_sigs = list(w.get(field) or [])
+            seen_urls = {s.get("url") for s in merged_sigs if isinstance(s, dict)}
+            for s in (l.get(field) or []):
+                if isinstance(s, dict) and s.get("url") not in seen_urls:
+                    merged_sigs.append(s)
+            if merged_sigs:
+                w[field] = merged_sigs
+        for flag in ("hiring_role_match", "review_negative", "hiring_checked", "review_checked"):
+            if l.get(flag):
+                w[flag] = True
+        w.setdefault("merged_from", []).append(
+            {"key": loser, "name": l.get("name", ""), "score": (l.get("lead_score") or {}).get("score")})
+        # Retire the loser; keep a tombstone rather than deleting outright so
+        # the merge is auditable and reversible.
+        l["_retired"] = {"merged_into": winner, "at": datetime.now(timezone.utc).isoformat()}
+        l["eligibility_state"] = "rejected"
+        l["eligibility_reason"] = f"duplicate of {winner} — merged"
+        l["lead_score"] = {"score": 0, "tier": "Cold", "breakdown": {},
+                           "reasons": [f"duplicate record merged into {winner}"]}
+        if isinstance(w.get("lead_score"), dict):
+            w["lead_score"] = qualify_lead(w, w.get("site_quality"))
+    return len(retire)
+
+
+def reverify_cached_contact_paths(cache, limit=20):
+    """SGW-942: re-derive contact paths for cached records from the live page.
+
+    Why this exists: `site_quality` reads captured before the phone-extractor
+    fix contain values extracted from framework identifiers (Wix CSS classes,
+    site UUIDs), and the crawl loop SKIPS any domain whose
+    `site_quality.website_score >= 0` — so those records are never re-read and
+    keep rendering junk as "verified contact paths" (e.g. the (200) 951-7308
+    shown as the primary number for Construction Bookkeeping Services).
+
+    Ordering targets the highest-impact records first — eligible, site read
+    up, ordered by lead_score — and each is only written when a fresh read
+    DISAGREES with what is cached, so the pass repairs stale/contaminated
+    contact evidence and leaves verified records untouched. Bounded by
+    `limit`, one fetch per record via the existing `check_website` (which
+    already handles retry, www fallback, and UNKNOWN-on-failure), and
+    idempotent — a second run finds nothing left to change."""
+    candidates = []
+    for key, biz in (cache.get("businesses") or {}).items():
+        sq = biz.get("site_quality") or {}
+        if not isinstance(sq, dict) or sq.get("status") != "up":
+            continue
+        if biz.get("eligibility_state") != "eligible":
+            continue
+        if not (sq.get("phones") or biz.get("phones")):
+            continue
+        score = (biz.get("lead_score") or {}).get("score") or 0
+        candidates.append((-score, key, biz))
+    candidates.sort(key=lambda t: t[0])
+    updated = 0
+    for _rank, key, biz in candidates[:max(0, int(limit))]:
+        domain = (biz.get("own_domains") or [""])[0] or biz.get("url", "")
+        if not domain:
+            continue
+        sq = run_collector("website_check", check_website, domain)
+        if not isinstance(sq, dict) or sq.get("status") != "up" \
+                or sq.get("confidence") != "high":
+            continue  # unreadable now → leave the record exactly as it was
+        fresh = [p for p in (sq.get("phones") or []) if _normalize_phone(p)]
+        cached = [p for p in ((biz.get("site_quality") or {}).get("phones") or [])
+                  if _normalize_phone(p)]
+        if sorted(fresh) == sorted(cached) and biz.get("contact_reverified_at"):
+            continue  # already verified against the live page, nothing new
+        if sorted(fresh) == sorted(cached):
+            # Agreement, but never yet verified — stamp it so it is skipped
+            # next run without another fetch.
+            biz["contact_reverified_at"] = datetime.now(timezone.utc).isoformat()
+            updated += 1
+            continue
+        if cached:
+            biz["phones_superseded"] = cached
+        biz["site_quality"] = sq
+        biz["phones"] = fresh
+        if sq.get("emails"):
+            biz["emails"] = sq["emails"]
+        if isinstance(biz.get("lead_score"), dict):
+            biz["lead_score"] = qualify_lead(biz, sq)
+        biz["contact_reverified_at"] = datetime.now(timezone.utc).isoformat()
+        updated += 1
+        time.sleep(1)  # be polite to small-business hosts
+    return updated
+
+
 def generate_coverage_report(cache, out_path=None):
     """SGW-939: deterministic coverage report — what percentage of eligible
     prospects has fresh hiring/review evidence, and what's still missing.
@@ -3974,12 +4604,31 @@ def main():
     parser.add_argument("--weekly-top", type=int, default=WEEKLY_BRIEF_MAX,
                         help=f"SGW-926: max prospects in the weekly brief (default "
                              f"{WEEKLY_BRIEF_MAX}, hard cap {WEEKLY_BRIEF_MAX}).")
+    parser.add_argument("--reverify-phones", type=int, default=0, metavar="N",
+                        help="SGW-942: re-fetch up to N cached records whose "
+                             "site_quality was scored by the pre-fix phone "
+                             "extractor, and re-derive their contact paths from "
+                             "the live page. Bounded, network-using, idempotent.")
     args = parser.parse_args()
 
     # SGW-938 B6: self-check mode — the previously-dead _test_qualify_lead()
     # is now a supported entry point for the repo verification command.
     if args.self_check:
         _test_qualify_lead()
+        sys.exit(0)
+
+    # SGW-942: bounded contact-path re-verification. Cached site_quality reads
+    # were scored by the pre-fix phone extractor, and the crawl loop skips
+    # domains it has already scored — so those records never get re-read and
+    # keep serving framework-identifier "phones" as verified contact paths.
+    # This pass re-fetches the worst offenders and rewrites their contact
+    # evidence from the live page. Explicit opt-in, bounded, idempotent.
+    if args.reverify_phones:
+        cache = load_cache()
+        changed = reverify_cached_contact_paths(cache, limit=args.reverify_phones)
+        if changed:
+            save_cache(cache)
+        log(f"Contact-path re-verification: {changed} records updated")
         sys.exit(0)
 
     # SGW-939: coverage report from cache only — no crawl, no network.
@@ -4166,7 +4815,19 @@ def main():
             sq = {"status": "unknown", "confidence": "low", "automation_gaps": [], "emails": []}
             biz["site_quality"] = sq
         # Merge phones found on the website into the business entry
-        if sq and sq.get("phones"):
+        # SGW-942 B1b: a successful own-site read is AUTHORITATIVE. The old
+        # code only ever appended, so a number extracted from search-result
+        # snippets (or from framework identifiers) stayed on the record
+        # forever even after the real site was read. When the site read is
+        # high-confidence, own-site numbers replace the list; the superseded
+        # values are preserved as evidence, not silently dropped.
+        if sq and sq.get("status") == "up" and sq.get("confidence") == "high" and sq.get("phones"):
+            _prior = list(biz.get("phones") or [])
+            _own = list(sq["phones"])
+            if _prior and sorted(_prior) != sorted(_own):
+                biz["phones_superseded"] = _prior
+            biz["phones"] = _own
+        elif sq and sq.get("phones"):
             for p in sq["phones"]:
                 if p not in biz.get("phones", []):
                     biz.setdefault("phones", []).append(p)

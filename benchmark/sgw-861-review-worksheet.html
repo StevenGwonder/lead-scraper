@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SGW-861 — Human Review Worksheet — NWP Lead Engine</title>
+<style>
+:root{--bg:#0a0a0a;--card:#141414;--border:#292929;--fg:#d4d4d4;--dim:#8a8a8a;--accent:#D97548;--ok:#3ddc84;--warn:#ffd479;--bad:#ff6b6b;--info:#60CFF4}
+*{box-sizing:border-box}
+body{font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--fg);margin:0;padding:24px;line-height:1.5}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:22px;color:#fff;margin:0 0 4px}
+.sub{color:var(--dim);font-size:13px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 18px;margin-bottom:14px}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:top}
+th{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.05em}
+.rank{color:var(--dim);font-weight:700;width:30px}
+.biz-name{font-weight:700;color:#fff;font-size:14px}
+.dim{color:var(--dim)}
+.small{font-size:12px}
+.none{color:#5a5a5a;font-style:italic}
+.pill{font-size:11px;padding:2px 8px;border-radius:999px;background:#1f1f1f;border:1px solid var(--border);color:var(--dim);display:inline-block;margin:1px 2px 1px 0}
+.pill.ok{background:#10241a;border-color:#1f4d33;color:var(--ok)}
+.pill.warn{background:#2a2112;border-color:#5a4a2a;color:var(--warn)}
+.pill.bad{background:#2a1212;border-color:#5a2a2a;color:var(--bad)}
+.pill.info{background:#0f2230;border-color:#1f4a63;color:var(--info)}
+.ev{width:34%}
+.ev-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);margin-top:6px}
+.ev-label:first-child{margin-top:0}
+.sig-title{color:var(--fg)}
+ul{margin:2px 0 4px;padding-left:16px}
+li{margin:1px 0}
+.verdict{width:22%}
+.verdict-box{background:#1b1b1b;border:1px solid var(--border);border-radius:8px;padding:8px}
+.verdict-options{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+.vopt{font-size:11px;padding:3px 8px;border-radius:999px;background:#222;border:1px solid var(--border);color:var(--dim);cursor:pointer;user-select:none}
+.vopt:hover{border-color:var(--accent);color:#fff}
+.vopt.sel{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+.reason-box{min-height:44px;background:#141414;border:1px solid var(--border);border-radius:6px;padding:6px;font-size:12px;color:var(--fg);outline:none}
+.reason-box:focus{border-color:var(--accent)}
+.footer{color:#5a5a5a;font-size:12px;margin-top:24px;text-align:center}
+a{color:var(--info)}
+</style>
+</head>
+<body><div class="wrap">
+<h1>SGW-861 — Human Review Worksheet</h1>
+<div class="sub">NWP Precision Lead Engine · benchmark fixture (53 anonymized records) · generated 2026-08-09 · agent labels shown for reference — <b>your labels are the ground truth</b></div>
+
+<div class="card">
+<b>How to review:</b> For each record, open the URL and check the business is real, in-geography (Murrieta/Temecula CA area), contactable, and in an admin/ops-heavy lane (law, accounting, insurance, property management, staffing, etc.). Then pick a label:
+<ul>
+<li><b>good_fit</b> — real, contactable, in-geography, admin/ops-heavy; you would contact.</li>
+<li><b>possible_fit</b> — real business but weak capacity/signals/geography; worth a look, not priority.</li>
+<li><b>bad_fit</b> — crawler artifact: directory listing, SEO keyword page, aggregator, out-of-geography, identity-confused. Would NOT contact.</li>
+<li><b>unknown</b> — unverifiable: site down/blocked, no contact captured.</li>
+</ul>
+<div class="small dim">Flag anything notable: false contact data, directory/aggregator records, insufficient evidence, or commercially promising despite a low score. Click a label chip to select it; type a reason in the box. Then reply to Sierra with your verdicts (or just the ones that differ from the agent labels).</div>
+</div>
+
+<table>
+<tr><th>#</th><th>Business</th><th>Pipeline</th><th>Captured evidence</th><th>Your verdict</th></tr>
+
+<tr>
+  <td class="rank">1</td>
+  <td>
+    <div class="biz-name">home, auto, business and renters insurance</div>
+    <div class="dim">Insurance · <a href="https://agent.travelers.com/ca/murrieta" target="_blank">agent.travelers.com/ca/murrieta</a></div>
+    <div class="dim">phones: (951) 555-01152, (951) 555-01153, (951) 555-01154, (951) 555-01155, (951) 555-01156, (951) 555-01157 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 52</span> <span class="pill info">tier Warm</span> <span class="pill warn">agent: possible_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); hiring for an automatable role — aggregator echo only (+15); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no click-to-call, no CRM, no marketing tools, thin content (119w)</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">$33k-$168k Work From Home Auto Insurance Jobs (NOW HIRING)</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Insurance Careers at USAA</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Career Opportunities - Auto-Owners Insurance</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">8 Best Home and Auto Insurance Bundles for 2026 - NerdWallet</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Auto-Owners Homeowners Insurance Review for 2026 | U.S. News</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Auto-Owners Homeowners Insurance Reviews &amp; Complaints</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="homeautobusinessandr">good_fit</span>
+        <span class="vopt" data-k="homeautobusinessandr">possible_fit</span>
+        <span class="vopt" data-k="homeautobusinessandr">bad_fit</span>
+        <span class="vopt" data-k="homeautobusinessandr">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="homeautobusinessandr" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">2</td>
+  <td>
+    <div class="biz-name">Sanchez &amp; Associates</div>
+    <div class="dim">Accounting · <a href="https://egsanchez.com" target="_blank">egsanchez.com</a></div>
+    <div class="dim">phones: (951) 555-01101, (951) 555-01101, (951) 555-01101 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 52</span> <span class="pill info">tier Warm</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); hiring for an automatable role — aggregator echo only (+15); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">Eg Sanchez Associates Senior Tax Accountant Job Murrieta</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Careers – Falcón Sánchez &amp; Associates, PSC</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Senior Tax Accountant job with E.G. Sanchez &amp; Associates, CPAs, APC ..</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Working at Sanchez and Associates in Chicago, IL: Employee Reviews | I</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">EG SANCHEZ &amp; ASSOCIATES - Updated June 2026 - Yelp</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Working at Sanchez and Associates: Employee Reviews | Indeed.com</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="sanchezassociates">good_fit</span>
+        <span class="vopt" data-k="sanchezassociates">possible_fit</span>
+        <span class="vopt" data-k="sanchezassociates">bad_fit</span>
+        <span class="vopt" data-k="sanchezassociates">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="sanchezassociates" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">3</td>
+  <td>
+    <div class="biz-name">Singleton Smith Law Offices</div>
+    <div class="dim">Law Office · <a href="https://singletonsmith.com" target="_blank">singletonsmith.com</a></div>
+    <div class="dim">phones: (951) 555-01101, (951) 555-01101, (951) 555-01101 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 48</span> <span class="pill info">tier Warm</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); single complaint mention — needs corroboration to score; hiring for an automatable role — aggregator echo only (+15)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">Singleton Smith Law Offices Attorney Jobs | LawCrossing.com</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Careers at Singleton Smith Law Offices | Jennie Johnson</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Exciting news…we're hiring! | Singleton Smith Law Offices, Inc.</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Singleton Smith Law Offices - Updated May 2026 - 22 Photos &amp; 188 Revie</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Singleton Smith Law Offices, Inc. - Reviews, Photos &amp; Phone Number - U</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Singleton Smith Law Offices, Inc. - 420 Reviews - Birdeye</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="singletonsmithlawoff">good_fit</span>
+        <span class="vopt" data-k="singletonsmithlawoff">possible_fit</span>
+        <span class="vopt" data-k="singletonsmithlawoff">bad_fit</span>
+        <span class="vopt" data-k="singletonsmithlawoff">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="singletonsmithlawoff" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">4</td>
+  <td>
+    <div class="biz-name">HRSS Corp</div>
+    <div class="dim">Recruiting · <a href="https://hrsscorp.com" target="_blank">hrsscorp.com</a></div>
+    <div class="dim">phones: (951) 555-01161, (951) 555-01162, (951) 555-01163 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 45</span> <span class="pill info">tier Warm</span> <span class="pill warn">agent: possible_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); admin/ops trade — budget proxy (+8); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">HRSS, LLP Reviews (16): Pros &amp; Cons of Working At HRSS, LLP | Glassdoo</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Hess Corporation Reviews in US | Glassdoor</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">What are the cons of working at HRS Group according to real employee r</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="hrsscorp">good_fit</span>
+        <span class="vopt" data-k="hrsscorp">possible_fit</span>
+        <span class="vopt" data-k="hrsscorp">bad_fit</span>
+        <span class="vopt" data-k="hrsscorp">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="hrsscorp" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">5</td>
+  <td>
+    <div class="biz-name">#1 Personal Injury Attorneys</div>
+    <div class="dim">Law Office · <a href="https://khashanlaw.com" target="_blank">khashanlaw.com</a></div>
+    <div class="dim">phones: (951) 555-01101, (951) 555-01102, (951) 555-01103 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 43</span> <span class="pill info">tier Warm</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); generic hiring signal — aggregator echo only (+6); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no click-to-call, no contact page, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">$89k-$220k Personal Injury Attorney Jobs (NOW HIRING) Aug 25</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">$17-$48/hr Personal Injury Jobs (NOW HIRING) Feb 2026</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Best Personal Injury Litigation - Plaintiffs Lawyers in America</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Top Rated Murrieta, CA Personal Injury Lawyers - Avvo.com</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Who is the best personal injury attorney in Louisiana and what are the</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="1personalinjuryattor">good_fit</span>
+        <span class="vopt" data-k="1personalinjuryattor">possible_fit</span>
+        <span class="vopt" data-k="1personalinjuryattor">bad_fit</span>
+        <span class="vopt" data-k="1personalinjuryattor">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="1personalinjuryattor" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">6</td>
+  <td>
+    <div class="biz-name">Accurate Accounting</div>
+    <div class="dim">Accounting · <a href="https://accuacct.com" target="_blank">accuacct.com</a></div>
+    <div class="dim">phones: (951) 555-01108, (951) 555-01109, (951) 555-01110 · emails: contact0@anonymized.example</div>
+  </td>
+  <td>
+    <div><span class="pill info">score 43</span> <span class="pill info">tier Warm</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); generic hiring signal — aggregator echo only (+6); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">Accounting Opportunities - CalCPA</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Accurate Accounting, Murrieta, CA - Reviews (10), Photos (17 ...</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Accurate Accounting - 71 Reviews - Accountants in Murrieta, CA - Birde</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">ACCURATE ACCOUNTING CPA - Updated July 2026 - 24 Photos - 29970 ... - </span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="accurateaccounting">good_fit</span>
+        <span class="vopt" data-k="accurateaccounting">possible_fit</span>
+        <span class="vopt" data-k="accurateaccounting">bad_fit</span>
+        <span class="vopt" data-k="accurateaccounting">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="accurateaccounting" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">7</td>
+  <td>
+    <div class="biz-name">Ubiquitous Networks IT Business Consulting.</div>
+    <div class="dim">Consulting · <a href="https://ubiquitousnetworks.net/it-business-consulting-temecula-ca" target="_blank">ubiquitousnetworks.net/it-business-consulting-temecula-ca</a></div>
+    <div class="dim">phones: (951) 555-01101, (951) 555-01101, (951) 555-01101 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 43</span> <span class="pill info">tier Warm</span> <span class="pill warn">agent: possible_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); generic hiring signal — aggregator echo only (+6); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">Careers - Ubiquitous Networks</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">$62k-$97k Ubiquitous Jobs (NOW HIRING) Jun 2026</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">$62k-$253k Ubiquitous Jobs (NOW HIRING) Apr 2026 - ZipRecruiter</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Ubiquitous Networks IT Business Consulting Temecula Ca.</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Ubiquitous Reviews: Pros And Cons of Working At Ubiquitous&lt;!-- --&gt; | G</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">UBIQUITOUS NETWORKS - Updated May 2026 - Request a Quote - Yelp</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="ubiquitousnetworksit">good_fit</span>
+        <span class="vopt" data-k="ubiquitousnetworksit">possible_fit</span>
+        <span class="vopt" data-k="ubiquitousnetworksit">bad_fit</span>
+        <span class="vopt" data-k="ubiquitousnetworksit">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="ubiquitousnetworksit" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">8</td>
+  <td>
+    <div class="biz-name">Tax City, LLC</div>
+    <div class="dim">Accounting · <a href="https://taxcityllc.com" target="_blank">taxcityllc.com</a></div>
+    <div class="dim">phones: (951) 555-01101, (951) 555-01101, (951) 555-01101 · emails: contact0@anonymized.example, contact1@anonymized.example</div>
+  </td>
+  <td>
+    <div><span class="pill info">score 42</span> <span class="pill info">tier Warm</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); generic hiring signal — aggregator echo only (+6); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">$95k-$139k Tax Office Jobs Texas City, TX (NOW HIRING)</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">$103k-$151k Tax Jobs in Oklahoma City, OK (NOW HIRING)</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">$80k-$145k Tax Accounting Jobs in Kansas City, MO</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+1 more</li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">TAX CITY, LLC - Updated June 2026 - 34 Reviews - 31285 Temecula Pkwy, </span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Tax City LLC - 8 Reviews - Tax Services in Temecula, CA - Birdeye</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Tax City, LLC in Temecula, CA - Reviews, Hours, and Contact Details</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="taxcityllc">good_fit</span>
+        <span class="vopt" data-k="taxcityllc">possible_fit</span>
+        <span class="vopt" data-k="taxcityllc">bad_fit</span>
+        <span class="vopt" data-k="taxcityllc">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="taxcityllc" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">9</td>
+  <td>
+    <div class="biz-name">Employment, Credit, &amp; Military Deferment</div>
+    <div class="dim">Law Office · <a href="https://temeculaconsumerattorneys.com" target="_blank">temeculaconsumerattorneys.com</a></div>
+    <div class="dim">phones: (951) 555-01131, (951) 555-01132, (951) 555-01133, (951) 555-01134 · emails: contact0@anonymized.example, contact1@anonymized.example</div>
+  </td>
+  <td>
+    <div><span class="pill info">score 41</span> <span class="pill info">tier Warm</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); admin/ops trade — budget proxy (+8); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no CRM, no marketing tools, no analytics</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Deferment and Forbearance: Military Service Members - Purefy</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Veterans, active duty can take advantage of Public Service Loan Forgiv</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Military Benefits</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="employmentcreditmili">good_fit</span>
+        <span class="vopt" data-k="employmentcreditmili">possible_fit</span>
+        <span class="vopt" data-k="employmentcreditmili">bad_fit</span>
+        <span class="vopt" data-k="employmentcreditmili">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="employmentcreditmili" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">10</td>
+  <td>
+    <div class="biz-name">James H. Houle, CPA</div>
+    <div class="dim">Accounting · <a href="https://jameshoulecpa.com" target="_blank">jameshoulecpa.com</a></div>
+    <div class="dim">phones: (951) 555-01164, (951) 555-01165, (951) 555-01166 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 41</span> <span class="pill info">tier Warm</span> <span class="pill warn">agent: possible_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); admin/ops trade — budget proxy (+8); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">JAMES H. HOULE, CPA - Updated June 2026 - 24973 Washington Ave, Murrie</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Houle James H CPA - James H. Houle, CPA in Murrieta, CA – Reviews, Hou</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">HOULE J JAMES CPA - Updated May 2026 - 438 E Katella Ave, Orange, Cali</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="jameshhoulecpa">good_fit</span>
+        <span class="vopt" data-k="jameshhoulecpa">possible_fit</span>
+        <span class="vopt" data-k="jameshhoulecpa">bad_fit</span>
+        <span class="vopt" data-k="jameshhoulecpa">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="jameshhoulecpa" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">11</td>
+  <td>
+    <div class="biz-name">KDA Inc. — Licensed CPAs &amp; Enrolled Agents</div>
+    <div class="dim">Accounting · <a href="https://kdainc.com/service-areas/inland-empire/murrieta/cpa-firm" target="_blank">kdainc.com/service-areas/inland-empire/murrieta/cpa-firm</a></div>
+    <div class="dim">phones: (951) 555-01169, (951) 555-01170, (951) 555-01171, (951) 555-01172 · emails: contact0@anonymized.example</div>
+  </td>
+  <td>
+    <div><span class="pill info">score 41</span> <span class="pill info">tier Warm</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">admin/ops business — high intake/scheduling load (+25); admin/ops trade — budget proxy (+8); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">South Pasadena CPA Firm | KDA Inc. — Licensed CPAs &amp; Enrolled Agents</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">KDA - Updated July 2026 - 30 Photos &amp; 68 Reviews - Yelp</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Palmdale CPA Firm | KDA Inc. — Licensed CPAs &amp; Enrolled Agents</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="kdainclicensedcpasen">good_fit</span>
+        <span class="vopt" data-k="kdainclicensedcpasen">possible_fit</span>
+        <span class="vopt" data-k="kdainclicensedcpasen">bad_fit</span>
+        <span class="vopt" data-k="kdainclicensedcpasen">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="kdainclicensedcpasen" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">12</td>
+  <td>
+    <div class="biz-name">Plumbing Services</div>
+    <div class="dim">Plumbing · <a href="https://plumbermurrieta.plumbing" target="_blank">plumbermurrieta.plumbing</a></div>
+    <div class="dim">phones: (951) 555-01101, (951) 555-01101, (951) 555-01101, (951) 555-01101, (951) 555-01101 · emails: contact0@anonymized.example</div>
+  </td>
+  <td>
+    <div><span class="pill info">score 32</span> <span class="pill info">tier Cold</span> <span class="pill warn">agent: possible_fit</span></div>
+    <div class="dim small">appointment trade with no booking system (+10); generic hiring signal — aggregator echo only (+6); multi-location / multi-phone (+8)</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, no contact page, no CRM</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">$26-$47/hr Plumbing Jobs New York City, NY (NOW HIRING)</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">$23-$43/hr Plumbing Jobs (NOW HIRING) Jun 2026</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Plumbing Jobs in Murrieta, CA (NOW HIRING) - ZipRecruiter</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Hire the Best Local Plumbers Near Me with Reviews | Angi</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Reviews | All Plumbing Inc.</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">THE BEST 10 PLUMBING IN MURRIETA, CA - Yelp</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="plumbingservices">good_fit</span>
+        <span class="vopt" data-k="plumbingservices">possible_fit</span>
+        <span class="vopt" data-k="plumbingservices">bad_fit</span>
+        <span class="vopt" data-k="plumbingservices">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="plumbingservices" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">13</td>
+  <td>
+    <div class="biz-name">Managed IT Services Temecula</div>
+    <div class="dim">Consulting · <a href="https://temeculamanageditservices.com/about-us" target="_blank">temeculamanageditservices.com/about-us</a></div>
+    <div class="dim">phones: <span class="none">none</span> · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 3</span> <span class="pill info">tier Unverified</span> <span class="pill dim">agent: unknown</span></div>
+    <div class="dim small">site appears down (+3); no contact info — can't reach</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>down</b> · confidence <b>low</b> · gaps: near-empty page</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><span class="none">none captured</span></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="manageditservicestem">good_fit</span>
+        <span class="vopt" data-k="manageditservicestem">possible_fit</span>
+        <span class="vopt" data-k="manageditservicestem">bad_fit</span>
+        <span class="vopt" data-k="manageditservicestem">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="manageditservicestem" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">14</td>
+  <td>
+    <div class="biz-name">Full Service Accounting Firm</div>
+    <div class="dim">Accounting · <a href="https://swensonadvisors.com" target="_blank">swensonadvisors.com</a></div>
+    <div class="dim">phones: (951) 555-01138 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 0</span> <span class="pill info">tier Cold</span> <span class="pill ok">agent: good_fit</span></div>
+    <div class="dim small">directory/out-of-area record — not a local business</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, not mobile-responsive, no CRM</div>
+    <div class="ev-label">Hiring</div><div class="small"><ul><li><span class="sig-title">$69k-$175k Full Time Public Accounting Firm Jobs (NOW HIRING)</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Accounting Firm Jobs - Tax Associate Openings - Jacksonville CPA Firm</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Careers at Professional Financial Services Firms</span> <span class="pill">job_board</span> <span class="pill dim">recency:unknown</span></li></ul></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Best Accounting Companies - 2026 Reviews | Goodfirms</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Top Accountants and Accounting Firms - Jul 2026 Rankings | Clutch.co</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Top Accountants in Louisville, KY 2026 List - Bluegrass Professional A</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="fullserviceaccountin">good_fit</span>
+        <span class="vopt" data-k="fullserviceaccountin">possible_fit</span>
+        <span class="vopt" data-k="fullserviceaccountin">bad_fit</span>
+        <span class="vopt" data-k="fullserviceaccountin">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="fullserviceaccountin" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">15</td>
+  <td>
+    <div class="biz-name">Handyman</div>
+    <div class="dim">Handyman · <a href="https://thetoolboxpro.com/handyman-in-temecula-ca" target="_blank">thetoolboxpro.com/handyman-in-temecula-ca</a></div>
+    <div class="dim">phones: (951) 555-01142, (951) 555-01143, (951) 555-01144 · emails: contact0@anonymized.example</div>
+  </td>
+  <td>
+    <div><span class="pill info">score 0</span> <span class="pill info">tier Cold</span> <span class="pill bad">agent: bad_fit</span></div>
+    <div class="dim small">directory/out-of-area record — not a local business</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><span class="none">none captured</span></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="handyman">good_fit</span>
+        <span class="vopt" data-k="handyman">possible_fit</span>
+        <span class="vopt" data-k="handyman">bad_fit</span>
+        <span class="vopt" data-k="handyman">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="handyman" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">16</td>
+  <td>
+    <div class="biz-name">LawLink</div>
+    <div class="dim">Law Office · <a href="https://lawlink.com/listings/attorneys/state/ca/city/murrieta" target="_blank">lawlink.com/listings/attorneys/state/ca/city/murrieta</a></div>
+    <div class="dim">phones: (951) 555-01173, (951) 555-01174, (951) 555-01175 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 0</span> <span class="pill info">tier Cold</span> <span class="pill bad">agent: bad_fit</span></div>
+    <div class="dim small">directory/out-of-area record — not a local business</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Lawlink Reviews: Pros And Cons of Working At Lawlink | Glassdoor</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">LawLink Reviews and Pricing 2026 | F6S</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">LawLink - Apps on Google Play</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="lawlink">good_fit</span>
+        <span class="vopt" data-k="lawlink">possible_fit</span>
+        <span class="vopt" data-k="lawlink">bad_fit</span>
+        <span class="vopt" data-k="lawlink">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="lawlink" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">17</td>
+  <td>
+    <div class="biz-name">Murrieta, CA Attorney Directory: lawyers, law firms, attorneys ...</div>
+    <div class="dim">Law Office · <a href="https://attorneyhelp.org/attorneys/ca_murrieta_lawyers.html" target="_blank">attorneyhelp.org/attorneys/ca_murrieta_lawyers.html</a></div>
+    <div class="dim">phones: (951) 555-01188, (951) 555-01189, (951) 555-01190 · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 0</span> <span class="pill info">tier Cold</span> <span class="pill bad">agent: bad_fit</span></div>
+    <div class="dim small">directory/out-of-area record — not a local business</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>up</b> · confidence <b>high</b> · gaps: no booking/chat system, no click-to-call, no CRM, no marketing tools</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><ul><li><span class="sig-title">Best Lawyers in Murrieta, CA | Justia Lawyer Directory</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">TOP 10 BEST Lawyers in Murrieta, CA - Updated 2026 - Quality ... - Yel</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li><span class="sig-title">Murrieta, CA, Attorneys Near Me | Find Top Law Firms</span> <span class="pill">review_site</span> <span class="pill dim">recency:unknown</span></li><li class="dim">+2 more</li></ul></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="murrietacaattorneydi">good_fit</span>
+        <span class="vopt" data-k="murrietacaattorneydi">possible_fit</span>
+        <span class="vopt" data-k="murrietacaattorneydi">bad_fit</span>
+        <span class="vopt" data-k="murrietacaattorneydi">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="murrietacaattorneydi" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+<tr>
+  <td class="rank">18</td>
+  <td>
+    <div class="biz-name">Rios Landscape And Tree Services</div>
+    <div class="dim">Tree Service · <a href="https://rioslandscapes.com" target="_blank">rioslandscapes.com</a></div>
+    <div class="dim">phones: <span class="none">none</span> · emails: <span class="none">none</span></div>
+  </td>
+  <td>
+    <div><span class="pill info">score 0</span> <span class="pill info">tier Unverified</span> <span class="pill dim">agent: unknown</span></div>
+    <div class="dim small">site unverified — scored on external signals only; no contact info — can't reach</div>
+  </td>
+  <td class="ev">
+    <div class="ev-label">Site</div><div class="small">status <b>unknown</b> · confidence <b>low</b> · gaps: unreachable — couldn't connect</div>
+    <div class="ev-label">Hiring</div><div class="small"><span class="none">none captured</span></div>
+    <div class="ev-label">Reviews</div><div class="small"><span class="none">none captured</span></div>
+  </td>
+  <td class="verdict">
+    <div class="verdict-box">
+      <div class="dim small">Your label:</div>
+      <div class="verdict-options">
+        <span class="vopt" data-k="rioslandscapeandtree">good_fit</span>
+        <span class="vopt" data-k="rioslandscapeandtree">possible_fit</span>
+        <span class="vopt" data-k="rioslandscapeandtree">bad_fit</span>
+        <span class="vopt" data-k="rioslandscapeandtree">unknown</span>
+      </div>
+      <div class="dim small">Reason (evidence-based):</div>
+      <div class="reason-box" contenteditable="true" data-k="rioslandscapeandtree" placeholder="e.g. real CPA firm, phone verified, hiring for bookkeeper — good_fit"></div>
+    </div>
+  </td>
+</tr>
+</table>
+
+<div class="footer">SGW-861 · human-verified benchmark · NWP Precision Lead Engine · Sierra</div>
+</div>
+<script>
+document.querySelectorAll('.vopt').forEach(el => {
+  el.addEventListener('click', () => {
+    const k = el.dataset.k;
+    document.querySelectorAll(`.vopt[data-k="${k}"]`).forEach(o => o.classList.remove('sel'));
+    el.classList.add('sel');
+  });
+});
+</script>
+</body></html>
