@@ -1140,7 +1140,14 @@ USER_AGENTS = [
 
 # T15/T17: deeper, honester fetching
 FETCH_TIMEOUT = 20            # seconds per request (was 12 — slow small-biz hosts)
-FETCH_BUDGET = 150000        # bytes read per page (was 12000 — phones live in footers)
+FETCH_BUDGET = 400000        # bytes read per page. Was 150000 — raised by
+                             # SGW-943 after measuring the false-negative cause:
+                             # EVERY tool-marker miss sampled was a marker sitting
+                             # past the old 150KB cap (HubSpot at byte 209890,
+                             # Acuity at 206062, Google Tag at 252108, tel:
+                             # links in a footer past budget). Truncating a read
+                             # and then reporting "not there" is the exact
+                             # mistake AGENTS.md §1b forbids.
 MAX_FETCHES = 4              # distinct URL fetches per business (candidates + subpages)
 MAX_SUBPAGE_FETCHES = 2      # how many /contact + /about pages to pull in
 # T17: SPA bootstrap markers. A near-empty page carrying one of these is a
@@ -1149,6 +1156,19 @@ JS_SHELL_MARKERS = (
     'id="root"', "id='root'", "__next_data__", "data-reactroot", "ng-version",
     'id="__nuxt"', 'id="app"', "data-react-helmet", "data-server-rendered",
 )
+
+
+def _may_assert_gap(truncated, found_markers):
+    """SGW-943: the PRESENT/ABSENT/UNKNOWN rule for tool detection, expressed
+    once so the gap logic and its fixtures share one definition.
+
+    Returns True when absence may legitimately be claimed. Absence is an
+    ABSENT claim and ABSENT requires a COMPLETE read: if the page was
+    truncated, a marker we did not find is UNKNOWN and must not be reported as
+    missing. A marker we DID find is PRESENT — there is no gap at all."""
+    if found_markers:
+        return False          # PRESENT — nothing is missing
+    return not truncated      # ABSENT only from a complete read
 
 
 def _detect_markers(html_lower, marker_dict):
@@ -1279,8 +1299,19 @@ def _fetch_html(url, timeout=FETCH_TIMEOUT, retries=1):
                 req = urllib.request.Request(
                     url, headers={"User-Agent": ua, "Accept": "text/html,application/xhtml+xml"})
                 with urllib.request.urlopen(req, timeout=timeout, context=_NOVERIFY_CTX) as resp:
-                    html = resp.read().decode("utf-8", errors="ignore")[:FETCH_BUDGET]
-                    return {"ok": True, "html": html, "final_url": resp.geturl()}
+                    raw = resp.read(FETCH_BUDGET + 1)
+                    # SGW-943: record whether the response was TRUNCATED. A
+                    # marker absent from a truncated read is UNKNOWN, not
+                    # ABSENT — the old code could not tell the difference and
+                    # reported "no analytics"/"no CRM" for markers that were
+                    # simply past the byte budget (fsresidential.com's HubSpot
+                    # at byte 209890, Acuity at 206062; Superior Virtual's
+                    # Google Tag at 252108). Per AGENTS.md §1b only PRESENT may
+                    # score; ABSENT requires a complete read.
+                    truncated = len(raw) > FETCH_BUDGET
+                    html = raw[:FETCH_BUDGET].decode("utf-8", errors="ignore")
+                    return {"ok": True, "html": html, "final_url": resp.geturl(),
+                            "truncated": truncated}
             except urllib.error.HTTPError as e:
                 if e.code in (403, 401, 429):
                     blocked = True       # try the other UAs before concluding "blocked"
@@ -1332,6 +1363,10 @@ def check_website(domain):
 
     html = page["html"]
     html_lower = html.lower()
+    # SGW-943: did we read the WHOLE page? If not, a marker we failed to find
+    # is UNKNOWN, not ABSENT (AGENTS.md §1b). This is the flag the gap logic
+    # uses to decide whether it may claim "no CRM" / "no analytics" at all.
+    page_truncated = bool(page.get("truncated"))
 
     if any(m in html_lower for m in ("cf-browser-verification", "checking your browser", "cf-challenge")):
         return _base_result("blocked", "low", ["bot-protected — can't verify"])
@@ -1405,12 +1440,15 @@ def check_website(domain):
         gaps.append("no booking/chat system")
     elif not has_booking_system:
         gaps.append("no booking system")
-    if not has_tel: gaps.append("no click-to-call")
-    if not has_contact: gaps.append("no contact page")
+    if not has_tel and not page_truncated: gaps.append("no click-to-call")
+    if not has_contact and not page_truncated: gaps.append("no contact page")
     if not has_viewport: gaps.append("not mobile-responsive")
-    if not crm_tools: gaps.append("no CRM")
-    if not marketing_tools: gaps.append("no marketing tools")
-    if not analytics_tools: gaps.append("no analytics")
+    if _may_assert_gap(page_truncated, crm_tools):
+        gaps.append("no CRM")
+    if _may_assert_gap(page_truncated, marketing_tools):
+        gaps.append("no marketing tools")
+    if _may_assert_gap(page_truncated, analytics_tools):
+        gaps.append("no analytics")
 
     if words < 200:
         gaps.append(f"thin content ({words}w)")
@@ -2394,6 +2432,23 @@ def _test_qualify_lead():
                   if not v.get("_retired")]
     assert len(_survivors) == 1 and "(951) 699-1040" in _survivors[0]["phones"], \
         "SGW-942 fail: merge dropped the shared phone number"
+
+    # ── SGW-943: absence must be observable, not assumed ──
+    # The tool detector reported "no CRM" / "no analytics" / "no marketing
+    # tools" / "no click-to-call" from a TRUNCATED read. Measured against 40
+    # live sites: 5 of 11 'no click-to-call', 4 of 13 'no analytics', 2 of 37
+    # 'no CRM' and 5 of 39 'no marketing tools' claims were false, and EVERY
+    # one was a marker sitting past the fetch byte budget. A gap may only be
+    # asserted from a COMPLETE read (AGENTS.md §1b: PRESENT/ABSENT/UNKNOWN must
+    # never be merged).
+    assert _may_assert_gap(False, []) is True, \
+        "SGW-943 fail: a complete read may assert absence"
+    assert _may_assert_gap(True, []) is False, \
+        "SGW-943 fail: a truncated read must NOT assert absence"
+    assert _may_assert_gap(True, ["HubSpot"]) is False, \
+        "SGW-943 fail: a FOUND marker is PRESENT — it can never be a gap"
+    assert _may_assert_gap(False, ["HubSpot"]) is False, \
+        "SGW-943 fail: a found marker is not a gap on a complete read either"
 
     p = pitch_for({"trade": "Accounting", "review_negative": True})
     assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
