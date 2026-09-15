@@ -1203,12 +1203,46 @@ def _may_assert_gap(truncated, found_markers):
     return not truncated      # ABSENT only from a complete read
 
 
+# SGW-945: markers that must NOT be tested as bare substrings. A bare `in`
+# test produces confident nonsense on ordinary page text:
+#   'mbo'  -> Mindbody fires on "symbol" (every icon font carries it)
+#   'gtag' -> Google Tag fires on "tostringtag" (minified JS)
+#   'fbq'  -> Facebook Pixel fires on base64 blobs
+#   'fresha' -> Fresha fires on "refreshable"
+#   'acuity' -> Acuity fires on "acuityplatform.com" ad-server URLs (a tracker,
+#              not a booking system)
+# A false PRESENT is worse than a false gap: it silently removes an automation
+# gap, which LOWERS the score and hides a real lead. Each entry is the strict
+# pattern that must match instead.
+MARKER_STRICT = {
+    "mbo": r"\bmbo\b|mindbody",
+    "gtag": r"gtag\(|/gtag/js|googletagmanager",
+    "fbq": r"\bfbq\b|_fbq|connect\.facebook\.net",
+    "fresha": r"\bfresha\.com|fresha\.com/",
+    "acuity": r"acuityscheduling|squarespace\.com/scheduling|\bacuity\b(?!platform)",
+    "vcita": r"\bvcita\b",
+    "close.com": r"\bclose\.com\b",
+    "zoho": r"\bzoho\b",
+    "book.app": r"\bbook\.app\b",
+}
+
+
 def _detect_markers(html_lower, marker_dict):
-    """Helper: detect which named tools are present in lowercased HTML. Returns list of names found."""
+    """Detect which named tools are present in lowercased HTML.
+
+    SGW-945: a bare substring test is wrong for short markers — 'mbo' matched
+    "symbol" and 'gtag' matched "tostringtag", so pages were credited with tools
+    they do not have and their gaps were suppressed. Markers listed in
+    MARKER_STRICT are matched with a strict pattern instead.
+    """
     found = []
     seen = set()
     for marker, name in marker_dict.items():
-        if marker in html_lower and name not in seen:
+        if name in seen:
+            continue
+        strict = MARKER_STRICT.get(marker)
+        hit = bool(re.search(strict, html_lower)) if strict else (marker in html_lower)
+        if hit:
             seen.add(name)
             found.append(name)
     return found
