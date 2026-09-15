@@ -750,6 +750,46 @@ HIRING_VERBS = [
     "career opportunity", "careers at", "work with us",
 ]
 
+# NWP-LEAD-15/18 (2026-09-12): first-party careers/apply page discovery.
+#
+# WHY THIS EXISTS: the hiring collector only SEARCHED. SearXNG ranks ZipRecruiter
+# and Indeed above a small business's own careers page, so of 371 hiring signals
+# in the live cache, 230 sit on job boards and only 18 on the business's own
+# domain — and 0 eligible businesses had a corroborated own-site role match.
+# That 25-point award is the only signal that closes the 52 -> 65 gap, so the Hot
+# tier was unreachable BY CONSTRUCTION, not by threshold.
+#
+# Crawling the business's own site for a careers page is first-party evidence:
+# the posting provably belongs to the prospect, it is hard to fake, and it
+# bypasses the rate-limited search entirely (a direct fetch, ~0.5s, no queries).
+#
+# Deliberately CONSERVATIVE on link text: a bare "jobs" or "apply" appears in
+# unrelated UI ("apply filter", "jobs board"), so the strong tokens match first
+# and the generic ones only on an exact-ish path segment.
+CAREERS_LINK_TOKENS_STRONG = (
+    "careers", "career", "join-our-team", "joinourteam", "join us",
+    "work-with-us", "workwithus", "hiring",
+)
+# "join-<anything>" is a common formulation ("Join The TCWGlobal Family",
+# "join-the-family") and an exact-token list always misses the next variant.
+CAREERS_LINK_RE_STRONG = re.compile(
+    r"join[-_ ]?(our|the|us|my)?[-_ ]?(team|family|us|now)|work[-_ ]?with[-_ ]?us|"
+    r"careers?\b|\bhiring\b", re.I)
+CAREERS_LINK_TOKENS_WEAK = ("jobs", "job-openings", "apply", "opportunities")
+# A link whose TEXT is one of these is navigational chrome, not a careers page.
+CAREERS_FALSE_FRIEND_TEXT = ("apply filter", "apply coupon", "apply now filter",
+                             "job board", "jobs board", "apply promo")
+# SGW: "employment" was in the strong list and caused a REAL false positive — it
+# matched a law firm's PRACTICE AREA. lock-law.com/employment-defense/ was
+# selected as a "careers page" and would have been scanned for job roles. A term
+# that describes a service is not evidence of hiring. Same class for other
+# practice/service areas.
+CAREERS_FALSE_FRIEND_HREF = (
+    "employment-defense", "employment-law", "employment-lawyer", "employment-attorney",
+    "employment-agreement", "employment-contract", "terms-of-employment",
+    "equal-employment", "employment-verification", "at-will",
+)
+
 # Platform detection — ponytail: dict loop replaces 6 inline ifs
 PLATFORMS = {
     "wp-content": "WordPress", "wordpress": "WordPress",
@@ -1453,6 +1493,52 @@ def _base_result(status, confidence, gaps):
             "observed_at": datetime.now(timezone.utc).isoformat()}
 
 
+def _find_careers_link(html, base_url, base_domain):
+    """NWP-LEAD-15/18: find the prospect's own careers / apply page, or "".
+
+    Only SAME-ORIGIN links count. An external link to a ZipRecruiter or Indeed
+    profile is exactly the aggregator problem this fixes, so it is never
+    returned — the point is first-party evidence.
+
+    Strong tokens are matched anywhere in the href or the link text. Weak tokens
+    ("jobs", "apply") appear in unrelated UI ("apply filter"), so they only match
+    when the token is a path SEGMENT — /jobs, /jobs/, /careers/apply — and the
+    link text is not navigational chrome.
+    """
+    best = ""
+    for m in re.finditer(r'<a\b[^>]*href=["\']([^"\']+)["\'][^>]*>(.*?)</a>',
+                         html, re.I | re.S):
+        href, text = m.group(1), re.sub(r"<[^>]+>", " ", m.group(2))
+        text_l = re.sub(r"\s+", " ", text).strip().lower()
+        if any(ff in text_l for ff in CAREERS_FALSE_FRIEND_TEXT):
+            continue
+        # A law firm's "Employment Defense" practice area is not a careers page.
+        if any(ff in href.lower() for ff in CAREERS_FALSE_FRIEND_HREF):
+            continue
+        full = _absolutize(href, base_url, base_domain)
+        if not full:
+            continue
+        # Same origin only — an off-site careers listing is not first-party.
+        try:
+            host = re.sub(r"^https?://(www\.)?", "", full.lower()).split("/")[0]
+        except Exception:
+            continue
+        if base_domain and not (host == base_domain or host.endswith("." + base_domain)):
+            continue
+        href_l = full.lower()
+        path = "/" + href_l.split("/", 3)[3] if href_l.count("/") >= 3 else "/"
+        blob = href_l + " " + text_l
+        if any(t in blob for t in CAREERS_LINK_TOKENS_STRONG):
+            return full
+        # regex form catches "join-the-family" / "Join The TCWGlobal Family"
+        if CAREERS_LINK_RE_STRONG.search(blob):
+            return full
+        segments = [s for s in path.split("/") if s]
+        if any(seg in CAREERS_LINK_TOKENS_WEAK for seg in segments) and not best:
+            best = full
+    return best
+
+
 def _absolutize(href, base_url, base_domain):
     """Resolve an href to a same-domain absolute URL, or None if off-site/non-http."""
     href = href.strip()
@@ -1585,6 +1671,23 @@ def check_website(domain):
                 sub_links.append(full)
         if len(sub_links) >= MAX_SUBPAGE_FETCHES:
             break
+    # ── NWP-LEAD-15/18: first-party careers/apply page ─────────────────────
+    # Fetch the prospect's OWN careers page when it links one. This is the only
+    # path to own_site hiring evidence, which is the only award (+25) that can
+    # carry a lead to the Hot bar. One extra fetch, no search queries, no
+    # tokens. Runs INSIDE the existing MAX_FETCHES budget so per-site cost stays
+    # bounded on the cron host.
+    careers_html = ""
+    careers_url = ""
+    careers_link = _find_careers_link(html, page["final_url"], base)
+    if careers_link and fetches < MAX_FETCHES:
+        fetches += 1
+        car = _fetch_html(careers_link, retries=0)
+        if car["ok"]:
+            careers_html = car["html"]
+            careers_url = car.get("final_url") or careers_link
+            combined += "\n" + careers_html
+
     for link in sub_links:
         if fetches >= MAX_FETCHES:
             break
@@ -1656,8 +1759,28 @@ def check_website(domain):
 
     has_outdated_email = any(any(od in addr for od in OUTDATED_EMAIL_DOMAINS) for addr in emails)
 
+    # ── NWP-LEAD-15/18: first-party hiring evidence from the OWN careers page ──
+    # Recorded as a structured signal with source_kind="own_site" so it earns
+    # the full automatable_role weight (25) rather than the weak 15. Only
+    # assert when the page was actually read — a fetch failure yields no claim
+    # (AGENTS.md 1b).
+    own_site_hiring = None
+    if careers_html:
+        car_lower = careers_html.lower()
+        roles = [r_ for r_ in AUTOMATABLE_ROLES if r_ in car_lower]
+        verbs = [v for v in HIRING_VERBS if v in car_lower]
+        if roles and verbs:
+            own_site_hiring = {
+                "title": "Careers page (own site)",
+                "url": careers_url,
+                "source_kind": "own_site",
+                "roles": roles[:6],
+                "verbs": verbs[:3],
+            }
+
     return {"status": "up", "confidence": "high",
             "website_score": website_score, "automation_gaps": gaps,
+            "own_site_hiring": own_site_hiring,
             "platform": platform, "words": words, "phones": page_phones,
             "has_crm": crm_tools, "has_analytics": analytics_tools,
             "has_marketing_tools": marketing_tools,
@@ -1883,6 +2006,14 @@ def qualify_lead(biz, sq):
     gb = 0
     hiring_role_match = biz.get("hiring_role_match", False)
     hiring_signals = biz.get("hiring_signals", [])
+    # NWP-LEAD-15/18: a role posting found on the prospect's OWN careers page
+    # (check_website) is first-party hard evidence and is preferred over the
+    # search-derived signals, which are mostly job-board echoes. Promote it into
+    # the same shape the weighting below already understands.
+    own_careers = sq.get("own_site_hiring") or None
+    if own_careers:
+        hiring_role_match = hiring_role_match or True
+        hiring_signals = list(hiring_signals) + [own_careers]
     strong_hiring = any(s.get("source_kind") == "own_site" for s in hiring_signals) if hiring_signals else False
     if hiring_role_match:
         if strong_hiring:
