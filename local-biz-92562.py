@@ -619,6 +619,39 @@ def apply_eligibility_sweep(cache):
 # are not business brands — they get re-keyed to their domain brand instead.
 GENERIC_PAGE_TITLE_PATTERNS = [
     r'^(contact|about|home|careers|services?|products?|locations?|team|faq|blog|news)\s*(us|our|the)?\s*$',
+    # 2026-09-12: the pattern above is anchored, so page chrome with a trailing
+    # noun slipped through as an "eligible local operating business":
+    #   "Home Page"              -> eligible, trade Accounting, score 42
+    #   "Legal Services"         -> eligible, trade Law Office
+    #   "Free Consultation"      -> eligible, trade Law Office
+    #   "Home Insurance Service" -> eligible, trade Insurance
+    # None is a business name. Allow the trailing page words.
+    r'^(home|contact|about|legal|insurance|financial|tax|accounting|medical'
+    r'|dental|professional|general|our|the)\s+'
+    r'(page|services?|service|consultation|consultations|information|info'
+    r'|office|department|center|centre|team|company|firm|practice|'
+    r'quote|quotes|appointment|booking|hours|location|locations|overview|'
+    r'resources?|solutions?|solutions|group)\s*$',
+    r'^free\s+(consultation|quote|estimate|assessment|evaluation|inspection)\s*$',
+    # A bare TRADE + generic tail with no brand: "Handyman Services",
+    # "Roofing Contractor", "Painting Services", "Carpet Cleaning". These are
+    # the category, not the business. Deliberately requires the WHOLE name to be
+    # trade-words only, so "Old Harbor Insurance" and "Savvy Consulting" (which
+    # also contain a trade word) survive.
+    r'^(handyman|plumbing|plumber|electrician|electrical|hvac|ac repair'
+    r'|air conditioning|roofing|roofer|painting|painter|landscaping|landscape'
+    r'|tree service|tree removal|carpet cleaning|auto repair|mechanic'
+    r'|accounting|bookkeeping|tax|insurance|law|attorney|lawyer|consulting'
+    r'|recruiting|staffing|property management|cleaning|construction'
+    r'|remodeling|moving|pest control|towing|window|garage door|pool)'
+    r'\s+(services?|service|contractor|contractors|contracting|company|co'
+    r'|center|centre|specialists?|pros?|professionals?|repair|repairs|group)\s*$',
+    # "Home Insurance Service", "Auto Repair Services", "Carpet Cleaning" —
+    # a generic trade noun phrase with a generic trailing noun, and no brand.
+    r'^(home|auto|car|life|health|business|commercial|residential|personal)\s+'
+    r'(insurance|repair|repairs|services?|care|maintenance|cleaning|painting|'
+    r'roofing|plumbing|heating|cooling|loan|loans|finance|financing)\s*'
+    r'(services?|service|center|centre|company|group|shop|specialists?)?\s*$',
     r'^(our|the)\s+(services?|team|story|company|firm|office)',
 ]
 GENERIC_MODIFIER_PATTERNS = [
