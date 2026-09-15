@@ -82,10 +82,16 @@ def main():
         if osh:
             found_hiring += 1
 
-        # Keep the old record if the new read failed — never lose a good read to
-        # a transient network error.
-        if sq.get("status") == "unknown" and (v.get("site_quality") or {}).get("status") == "up":
-            print(f"[{i:3}/{len(targets)}] {str(v.get('name'))[:34]:36} read regressed -> keeping old")
+        # NEVER let a worse read overwrite a good one. A sweep at speed trips
+        # WAFs, and the first run at 0.4s delay reclassified 22 live sites as
+        # down/blocked (14 of them actually serving HTTP 202 + a SiteGround
+        # captcha shell), which destroyed 14 valid scores — Amante 37->3,
+        # Elite Tax 39->17. Only adopt the new read when it is at least as
+        # trustworthy as the one on disk.
+        old_status = (v.get("site_quality") or {}).get("status")
+        if old_status == "up" and sq.get("status") != "up":
+            print(f"[{i:3}/{len(targets)}] {str(v.get('name'))[:34]:36} "
+                  f"read regressed ({old_status}->{sq.get('status')}) -> keeping old")
             continue
 
         v["site_quality"] = sq

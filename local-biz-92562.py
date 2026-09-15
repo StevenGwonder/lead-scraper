@@ -1667,10 +1667,26 @@ def check_website(domain):
     # uses to decide whether it may claim "no CRM" / "no analytics" at all.
     page_truncated = bool(page.get("truncated"))
 
+    # Bot/WAF interstitials. A sweep hit these live sites at speed and each
+    # answered HTTP 202 with a ~169-byte shell containing only a meta-refresh to
+    # /.well-known/sgcaptcha/ — SiteGround's challenge. The shell is under the
+    # near-empty threshold below, so it was classified "down" and destroyed 14
+    # valid records' scores (Amante 37->3, Elite Tax 39->17). A challenge page
+    # means WE were refused, not that the site is dead: that is UNKNOWN.
     if any(m in html_lower for m in ("cf-browser-verification", "checking your browser", "cf-challenge")):
         return _base_result("blocked", "low", ["bot-protected — can't verify"])
+    if any(m in html_lower for m in ("sgcaptcha", "/.well-known/", "captcha",
+                                     "just a moment", "attention required",
+                                     "ddos protection", "access denied",
+                                     "enable javascript and cookies")):
+        return _base_result("blocked", "low", ["bot-protected — can't verify"])
+    # A meta-refresh with a near-empty body is always an interstitial, never a
+    # real page, regardless of which vendor serves it.
+    if len(html_lower) < 600 and re.search(r'http-equiv=["\']refresh', html_lower):
+        return _base_result("blocked", "low", ["bot-protected — can't verify"])
 
-    # Near-empty page we *connected* to = genuinely dead/parked (T14 reserves "down").
+    # Near-empty page we *connected* to = genuinely dead/parked (T14 reserves
+    # "down"). SGW: this must NOT fire on a WAF shell — handled above.
     if len(html_lower) < 200:
         return _base_result("down", "low", ["near-empty page"])
 
