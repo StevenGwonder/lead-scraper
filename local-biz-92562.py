@@ -463,10 +463,41 @@ def geo_verdict(phones, own_domains=None):
     codes = {c for c in (_area_code(p) for p in (phones or [])) if c}
     if codes & TARGET_MARKET_AREA_CODES:
         return "local"
+
+    # A local business can publish an out-of-area number — a Google Voice line,
+    # an owner who kept their old mobile, a centralised booking number. Area
+    # code is therefore not the only geographic evidence, and demoting on it
+    # alone costs real leads. QC found 3: murrietaproroofing.com ("Murrieta
+    # Roofing Contractors", phone 612 - Minneapolis), temeculapropainters.com,
+    # temeculacpafirm.com. When the prospect's OWN NAME OR DOMAIN names the
+    # market, that is first-party geographic evidence and it outranks the
+    # phone. (A URL *path* like /locations/murrieta-ca/ does NOT count — that is
+    # a national chain's branch page, which is exactly what this gate should
+    # catch.)
+    if own_domains is not None and _names_target_market(own_domains):
+        return "local"
+
     geographic = codes - TOLL_FREE_AREA_CODES
     if geographic:
         return "out_of_area"      # a real area code, just not ours
     return "unknown"              # toll-free only / nothing usable
+
+
+# SGW-946b: market terms that, when they appear in a business's own DOMAIN, are
+# first-party evidence of local presence.
+MARKET_NAME_TERMS = (
+    "murrieta", "temecula", "menifee", "wildomar", "elsinore", "frenchvalley",
+    "sun city", "winchester", "9256", "9259",
+)
+
+
+def _names_target_market(own_domains):
+    """True when an own DOMAIN (not a URL path) names the target market."""
+    for d in (own_domains or []):
+        h = str(d).lower()
+        if any(t in h for t in MARKET_NAME_TERMS):
+            return True
+    return False
 
 
 def assess_eligibility(url, name="", trade="", phones=None, own_domains=None):
