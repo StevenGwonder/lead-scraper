@@ -404,6 +404,71 @@ def _domain_labels(domain):
     return "", d
 
 
+# SGW-946: target market. Murrieta / Temecula valley plus the surrounding
+# Southern California exchanges a local business would plausibly publish.
+# Toll-free codes (800/833/844/855/866/877/888) are deliberately ABSENT: they
+# are national and carry no geographic information.
+TARGET_MARKET_AREA_CODES = {
+    "951",  # Riverside / Temecula / Murrieta (the core market)
+    "949",  # south Orange County — overlaps the corridor
+    "760",  # north San Diego / Palm Desert
+    "909",  # San Bernardino / Riverside
+    "714",  "657", "658",  # Orange County
+    "626",  # San Gabriel Valley
+    "619",  "858",  # San Diego
+    "310",  "323",  "213",  # LA basin
+    "805",  # Ventura / Santa Barbara
+    "661",  # Antelope Valley
+}
+TOLL_FREE_AREA_CODES = {"800", "833", "844", "855", "866", "877", "888"}
+
+
+def _area_code(phone):
+    """SGW-946: 3-digit area code from a phone string, or ''.
+
+    Read POSITIONALLY when the number is written in a recognisable format,
+    because that is what the area code actually is. A strict 10-digit rule
+    rejected the benchmark fixture's anonymised numbers ("(951) 555-01101" —
+    malformed length, 555 exchange), which made every fixture record read
+    "unknown" and collapsed the benchmark. The leading group is the market
+    identifier and is correct regardless of what follows it.
+    """
+    s = (phone or "").strip()
+    m = re.match(r"^\(?(\d{3})\)?[\s.\-]", s) or re.match(r"^\+?1[\s.\-]?\(?(\d{3})\)?", s)
+    if m:
+        code = m.group(1)
+    else:
+        d = re.sub(r"\D", "", s)
+        if len(d) == 11 and d[0] == "1":
+            d = d[1:]
+        if len(d) < 10:
+            return ""
+        code = d[:3]
+    return "" if code[0] in "01" else code
+
+
+def geo_verdict(phones, own_domains=None):
+    """SGW-946: is this prospect in the target market?
+
+    Returns one of:
+      'local'        at least one target-market area code
+      'out_of_area'  a real geographic area code, but none in the market
+      'unknown'      only toll-free numbers, or nothing usable
+
+    'out_of_area' is the only state that should ever demote a record, and even
+    then it is routed to research rather than deleted — a business may be local
+    and simply publish a national line. 'unknown' is exactly that: unknown, and
+    must not be treated as absence (AGENTS.md §1b).
+    """
+    codes = {c for c in (_area_code(p) for p in (phones or [])) if c}
+    if codes & TARGET_MARKET_AREA_CODES:
+        return "local"
+    geographic = codes - TOLL_FREE_AREA_CODES
+    if geographic:
+        return "out_of_area"      # a real area code, just not ours
+    return "unknown"              # toll-free only / nothing usable
+
+
 def assess_eligibility(url, name="", trade="", phones=None, own_domains=None):
     """SGW-941: deterministic first-line eligibility gate.
 
@@ -455,6 +520,24 @@ def assess_eligibility(url, name="", trade="", phones=None, own_domains=None):
     # 7. No own domain AND no directory-domain list → nothing to verify against.
     if not own_domains and not url:
         return "research", "no domain/identity to verify"
+    # 8. Geography (SGW-946). The engine never checked that a prospect is in
+    #    the target market — assess_eligibility had no city/zip/area-code logic
+    #    at all. Online QC (2026-09-12) found hagarinsurance.com — Spring Hill,
+    #    Florida, ZIP 34609, area code 352 — sitting at rank 2 of the top 10 as
+    #    a Temecula lead, and 71 of 350 eligible records carried no Southern
+    #    California area code at all.
+    #
+    #    Deliberately a SOFT signal: we only reject when the evidence points
+    #    AWAY from the market. An 800/888/855 toll-free number proves nothing
+    #    either way (a Murrieta plumber can publish one), so a record with a
+    #    toll-free number and no local number is routed to "research", never
+    #    rejected — no evidence is not negative evidence (AGENTS.md §1b).
+    geo = geo_verdict(phones, own_domains)
+    if geo == "out_of_area":
+        return "research", "no target-market area code (out-of-area only)"
+    if geo == "unknown":
+        return "research", "no local area code — market unverified"
+
     return "eligible", "distinct local operating business"
 
 
