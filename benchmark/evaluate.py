@@ -82,6 +82,24 @@ def main():
         # identifiable as directory/SEO listings are demoted before scoring,
         # exactly as the live pipeline would treat them on next load.
         url = entry.get("url", "") or (entry.get("own_domains") or [""])[0]
+        # SGW-944 D6: the benchmark mirrored only the SGW-864 sweep and never
+        # ran the eligibility gate, so it scored records the live pipeline
+        # would have routed to research/rejected. precision@10 was therefore
+        # measuring a pipeline that does not exist. Apply the same gate.
+        # NOTE: the fixture stores contact paths as `phones_anonymized` /
+        # `emails_anonymized`, NOT `phones`. Passing the wrong key made every
+        # record look contact-less, so the gate rejected all 53 and precision@10
+        # collapsed to 0.30. Use the same fields reconstruct_biz() uses.
+        _elig_state, _elig_reason = pipe.assess_eligibility(
+            url, entry.get("name", ""), entry.get("trade", ""),
+            list(entry.get("phones_anonymized") or []),
+            entry.get("own_domains", []) or [])
+        if _elig_state in ("rejected", "research"):
+            biz["site_quality"] = {"status": "unknown", "confidence": "low"}
+            score = {"score": 0, "tier": "Cold", "breakdown": {},
+                     "reasons": [f"eligibility: {_elig_reason}"]}
+            ranked.append((0, key, entry, labels[key], score))
+            continue
         if (pipe._is_directory_record(url, entry.get("name", ""))
                 or pipe._mentions_out_of_area(entry.get("name", "") + " " + url)):
             biz["site_quality"] = {"status": "unknown", "confidence": "low"}

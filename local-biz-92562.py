@@ -295,6 +295,19 @@ def _signal_recency(title, snippet=""):
         return "recent"
     return "unknown"
 
+def _strip_www(host):
+    """SGW-944 D1/D2: remove a literal leading "www." from a hostname.
+
+    str.lstrip("www.") is NOT a prefix strip — it removes every leading 'w' and
+    '.' character, so "wecareteam.com" -> "ecareteam.com". That misclassified
+    real own-domain careers pages as third-party, and made "wecare.com" and
+    "ecare.com" compare equal in the duplicate-merge predicate. Keep this
+    helper as the single correct implementation.
+    """
+    h = str(host or "").strip().lower()
+    return h[4:] if h.startswith("www.") else h
+
+
 def _evidence_source_kind(url, own_domains=None):
     """SGW-865: classify where an evidence source lives.
     own_site = the business's own domain (strongest); job_board = aggregator
@@ -326,7 +339,11 @@ def _evidence_source_kind(url, own_domains=None):
                                   "birdeye", "tripadvisor", "foursquare")):
         return "review_site"
     if own_domains:
-        ods = [str(d).lower().lstrip("www.").rstrip(".") for d in own_domains]
+        # SGW-944 D1: lstrip("www.") strips ALL leading 'w' and '.' characters,
+        # not the literal prefix — "wecareteam.com" became "ecareteam.com", so a
+        # business's own careers URL was misclassified as a third party. 10 live
+        # records have domains starting with 'w'. Strip the prefix properly.
+        ods = [_strip_www(str(d).lower()).rstrip(".") for d in own_domains]
         if any(domain == d or domain.endswith("." + d) for d in ods if d):
             return "own_site"
         return "other"
@@ -451,6 +468,13 @@ def apply_eligibility_sweep(cache):
     counts {'eligible','research','rejected'} for the run log."""
     counts = {"eligible": 0, "research": 0, "rejected": 0}
     for biz in cache.get("businesses", {}).values():
+        # SGW-944 D3: a record retired by merge_duplicate_records is a tombstone.
+        # Re-assessing it here flipped it back to "eligible", so a merged-away
+        # duplicate re-entered the scoring stream and the signal sweep. Leave
+        # tombstones alone.
+        if biz.get("_retired"):
+            counts["rejected"] = counts.get("rejected", 0) + 1
+            continue
         url = biz.get("url", "") or (biz.get("own_domains") or [""])[0]
         state, reason = assess_eligibility(
             url, biz.get("name", ""), biz.get("trade", ""),
@@ -1103,6 +1127,14 @@ def extract_phones(text):
     # Separated forms first — these are what a human actually reads on a page.
     separated = [m.group(0) for m in re.finditer(
         r"(?:\(\d{3}\)|\b\d{3})[-.\s]\d{3}[-.\s]\d{4}\b", text)]
+    # SGW-944 D4: a country-coded number with NO separators — '19512345678' or
+    # '+19512345678' — was dropped entirely. The bare-10-digit pass rejects both
+    # windows (\(i\) the first 10 digits because the trailing '8' is alnum, and
+    # (\(ii\) the last 10 because the leading '1' is alnum), so a perfectly
+    # readable US number yielded nothing. Take the 11-digit form explicitly and
+    # reduce it to the national 10 when the leading digit is the country code.
+    for m in re.finditer(r"(?<!\d)\+?1(\d{10})(?!\d)", text):
+        separated.append("(" + m.group(1)[:3] + ") " + m.group(1)[3:6] + "-" + m.group(1)[6:])
     # Bare 10-digit runs, admitted only when genuinely standalone.
     bare = []
     for m in re.finditer(r"\d{10}", text):
@@ -1436,9 +1468,14 @@ def check_website(domain):
     has_chat = any(x in html_lower for x in ["chat", "intercom", "tawk", "drift", "olark"])
 
     gaps = []
-    if not has_booking_system and not has_chat:
+    # SGW-944 R1 (Warden): booking/chat was the ONLY gap asserted without a
+    # truncation guard. Proof: a 504KB page carrying a Calendly widget past the
+    # 400KB byte budget yields has_booking_system=False -> "no booking/chat
+    # system", worth +10 on an appointment trade. That is a fabricated gap, the
+    # exact defect AGENTS.md §1b forbids. Gate it like every neighbour.
+    if not has_booking_system and not has_chat and not page_truncated:
         gaps.append("no booking/chat system")
-    elif not has_booking_system:
+    elif not has_booking_system and not page_truncated:
         gaps.append("no booking system")
     if not has_tel and not page_truncated: gaps.append("no click-to-call")
     if not has_contact and not page_truncated: gaps.append("no contact page")
@@ -1554,8 +1591,11 @@ def search_hiring_signals(biz_name, cache_key, cache):
                     r.get("url", ""),
                     (cache.get("businesses", {}).get(cache_key, {}) or {}).get("own_domains")),
             })
-        if hiring_found:
-            break
+        # SGW-944 D5: breaking on ANY generic hit meant the second query
+        # ("<biz> jobs") never ran, so an automatable ROLE on the business's own
+        # site was never seen. Only stop early once the roles we actually sell
+        # against have been matched; otherwise keep looking.
+        if role_match: break
         time.sleep(6)
 
     biz_entry = cache.setdefault("businesses", {}).setdefault(cache_key, {})
@@ -4383,8 +4423,11 @@ def _same_business(a, b):
             if _normalize_phone(p)}
     if not (a_ph & b_ph):
         return False
-    a_dom = {str(d).lower().lstrip("www.") for d in (a.get("own_domains") or []) if d}
-    b_dom = {str(d).lower().lstrip("www.") for d in (b.get("own_domains") or []) if d}
+    # SGW-944 D2: same lstrip("www.") defect — it made "wecare.com" and
+    # "ecare.com" compare equal and merged two unrelated businesses. Use the
+    # real prefix strip.  See _strip_www().
+    a_dom = {_strip_www(str(d).lower()) for d in (a.get("own_domains") or []) if d}
+    b_dom = {_strip_www(str(d).lower()) for d in (b.get("own_domains") or []) if d}
     if a_dom and b_dom and (a_dom & b_dom):
         return True
     # Name-token route. Trade words are NOT identity: "Plumbing Services" and
