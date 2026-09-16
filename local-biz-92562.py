@@ -78,6 +78,30 @@ AGGREGATOR_DOMAINS = {
     "staffingagenciesca.com", "hemlane.com",
     # SGW-864 round 4: chamber CMS directory pages
     "gochambermaster.com", "chambermaster.com",
+    # ── NWP-LEAD-19: restoration + solar verticals ──────────────────────
+    # The card warned these two have "unusually dense directory / lead-gen SEO
+    # ecosystems". Verified: 17 of 28 probed domains slipped through the existing
+    # filters. Two distinct classes, both non-buyers:
+    #
+    # (a) QUOTE-FARM / DIRECTORY sites — they exist to sell the lead, not to run
+    #     the work. A "lead" here is a competitor, not a prospect.
+    "solarreviews.com", "energysage.com", "modernize.com", "solar-estimate.org",
+    "solarpowerrocks.com", "pickmysolar.com", "solarhomes.com", "solarpaneltalk.com",
+    "waterdamagelocal.com", "waterdamagedirectory.com", "restorationmaster.com",
+    "dryoutinc.com", "damagerestorations.com", "therestorationdirectory.com",
+    "moldremediationdirectory.com", "trustedpros.com", "networx.com",
+    # (b) NATIONAL FRANCHISE / CHAIN BRANDS — same class as the bbsi/usaa entries
+    #     above: they sell the service themselves and their local branches run on
+    #     CORPORATE systems, so they are not independent diagnosis-and-fix buyers.
+    #     A franchisee cannot change the intake stack; the franchisor owns it.
+    #     NOTE: this is a deliberate judgment call. A locally-owned SERVPRO
+    #     branch is the borderline case, and it is excluded because the brand's
+    #     systems are corporate, not because the owner is not local.
+    "servpro.com", "servproindustries.com", "servicemasterrestore.com",
+    "1800waterdamage.com", "puroclean.com", "restoration1.com",
+    "rainbowrestores.com", "belfor.com", "servicemaster.com",
+    "sunrun.com", "teslasolar.com", "vivintsolar.com", "sunpower.com",
+    "sunnova.com", "trinitysolar.com",
 }
 
 # SGW-864: URL path signatures that identify directory/aggregator listings.
@@ -762,6 +786,44 @@ TRADE_GROUPS = [
      "Recruiting": ["recruiting agency Murrieta CA", "staffing agency Temecula CA"],
      "Consulting": ["business consulting Murrieta CA", "consulting firm Temecula CA"],
      "_signals": True},
+    # ── NWP-LEAD-19: construction verticals that were never searched ──────
+    # The construction category was UNDER-DISCOVERED, not just under-scored:
+    # TRADE_GROUPS covered ten trades and omitted general contracting, concrete,
+    # flooring, windows, garage doors, pools, solar, excavation and — the single
+    # strongest fit in the whole ICP — RESTORATION / water damage / mold. Those
+    # businesses run genuine 24/7 emergency intake and lose real revenue on
+    # missed after-hours calls, which is the NWP pitch in concrete terms.
+    #
+    # New groups (G, H) rather than inflating A-F: the SearXNG rate limit is the
+    # binding constraint, and one group per run keeps queries-per-run unchanged.
+    # Priority order follows the card: restoration first, then recurring-service
+    # dispatch trades, then high-ticket permit-driven work, then quote-heavy.
+    #
+    # BUDGET: the existing groups run 5-8 queries each (E is the ceiling at 8).
+    # G and H are held to that same ceiling — adding groups must increase the
+    # number of RUNS before it increases queries per run, because the 6-second
+    # SearXNG delay makes query volume the binding constraint on the cron host.
+    # Asserted in --self-check so a future edit cannot quietly break it.
+    #
+    # Group G: priority 1-2 — restoration (the strongest ICP fit) + the
+    # recurring-service dispatch trades.
+    {"Restoration": ["water damage restoration Murrieta CA",
+                     "mold remediation Temecula CA",
+                     "water damage restoration Temecula CA"],
+     "Garage Doors": ["garage door repair Murrieta CA", "garage door Temecula CA"],
+     "Pool Service": ["pool service Murrieta CA"],
+     "Solar": ["solar installer Murrieta CA", "solar panel installation Temecula CA"]},
+    # Group H: priority 3-4 — high-ticket permit-driven work + quote-heavy trades.
+    # Every vertical the card names is covered by at least one query.
+    {"General Contracting": ["general contractor Murrieta CA",
+                             "home remodeling Murrieta CA",
+                             "ADU builder Temecula CA"],
+     "Concrete": ["concrete contractor Murrieta CA"],
+     "Fencing": ["fencing contractor Murrieta CA"],
+     "Flooring": ["flooring contractor Murrieta CA"],
+     "Windows": ["window replacement Murrieta CA"],
+     "Excavation": ["excavation contractor Murrieta CA"],
+     "_signals": True},
 ]
 
 # Admin/operations trades get higher automation demand bonus in scoring
@@ -1129,7 +1191,22 @@ SCORING = {
         "fax": 3,
     },
     # Appointment-heavy trades where "no booking system" signals manual drag
-    "appointment_trades": ("HVAC", "Plumbing", "Auto Repair", "Carpet Cleaning", "Handyman"),
+    # NWP-LEAD-19: the new verticals join here so they are not stranded in the
+    # same zero-scoring gap this card exists to fix. These are dispatch- and
+    # appointment-heavy: work is scheduled, the office answers the phone, and
+    # there is no online booking at most of them. `no_online_booking` is already
+    # skipped for appointment trades in _load_signals (they score it via this
+    # +10 award instead), so listing them here avoids double-counting.
+    "appointment_trades": ("HVAC", "Plumbing", "Auto Repair", "Carpet Cleaning", "Handyman",
+                           # restoration / emergency — the strongest ICP fit; genuine
+                           # 24/7 intake and every missed call is lost revenue
+                           "Restoration",
+                           # recurring service + dispatch load
+                           "Garage Doors", "Pool Service", "Solar",
+                           # high-ticket, permit-driven scheduling
+                           "General Contracting",
+                           # quote-heavy intake
+                           "Concrete", "Fencing", "Flooring", "Windows", "Excavation"),
     "tiers": {"hot": 65, "warm": 40},
 }
 
@@ -3200,6 +3277,47 @@ def _test_qualify_lead():
     _stored = _crow + _ctx[:max(0, 5 - len(_crow))]
     assert _crow and any(r.get("complaints") for r in _stored), \
         "SGW-949 fail: the [:5] cap severed a complaint from the counted set"
+
+    # ── NWP-LEAD-19: discovery groups stay inside the query budget ──
+    # The 6-second SearXNG delay makes queries-per-run the binding constraint on
+    # the cron host. Adding verticals must add RUNS, not per-run volume. E was
+    # the pre-existing ceiling at 8; G and H first came in at 13 queries each and
+    # this assertion is why that got caught.
+    _budget = max(sum(len(v) for k, v in g.items() if not k.startswith("_"))
+                  for g in TRADE_GROUPS[:6])
+    for _i, _g in enumerate(TRADE_GROUPS):
+        _n = sum(len(v) for k, v in _g.items() if not k.startswith("_"))
+        assert _n <= _budget, \
+            f"NWP-LEAD-19 fail: group {_i} runs {_n} queries, budget is {_budget}"
+    # Every vertical this card names must be reachable by at least one query.
+    _searched = set()
+    for _g in TRADE_GROUPS:
+        _searched.update(k for k in _g if not k.startswith("_"))
+    for _t in ("Restoration", "Garage Doors", "Pool Service", "Solar",
+               "General Contracting", "Concrete", "Fencing", "Flooring",
+               "Windows", "Excavation"):
+        assert _t in _searched, f"NWP-LEAD-19 fail: {_t} is never searched"
+        # and must not be stranded in the zero-scoring gap this card exists to fix
+        assert _t in SCORING["appointment_trades"] or _t in ADMIN_TRADES, \
+            f"NWP-LEAD-19 fail: {_t} is discovered but cannot score"
+    # Restoration and solar have dense directory/lead-gen SEO — the filters must
+    # hold on them. Verified against the real domains that dominate those searches.
+    for _u, _nm in (("https://servpro.com/", "SERVPRO of Murrieta"),
+                    ("https://servproindustries.com/", "SERVPRO Industries"),
+                    ("https://1800waterdamage.com/", "1800 WATER DAMAGE"),
+                    ("https://solarreviews.com/", "SolarReviews"),
+                    ("https://energysage.com/", "EnergySage"),
+                    ("https://modernize.com/", "Modernize"),
+                    ("https://pickmysolar.com/", "Pick My Solar"),
+                    ("https://sunrun.com/", "Sunrun")):
+        assert _is_directory_record(_u, _nm), \
+            f"NWP-LEAD-19 fail: directory slipped through ({_u})"
+    # ...while a real independent local business in the same vertical survives.
+    for _u, _nm in (("https://murrietarestoration.com/", "Murrieta Restoration Pros"),
+                    ("https://temeculawaterdamage.com/", "Temecula Water Damage"),
+                    ("https://sunrisesolarinc.com/", "Sunrise Solar Inc")):
+        assert not _is_directory_record(_u, _nm), \
+            f"NWP-LEAD-19 fail: real business rejected ({_u})"
 
     # ── NWP-LEAD-18: observed operational load ──
     # repetitive_work was two trade-membership doors, so construction scored a
@@ -5430,7 +5548,8 @@ def main():
     parser.add_argument("--output", help="Write report to file")
     parser.add_argument("--delay", type=float, default=6.0, help="Delay between queries (seconds)")
     parser.add_argument("--max-checks", type=int, default=20, help="Max website checks per run")
-    parser.add_argument("--group", type=int, help="Force a specific query group (0-5)")
+    parser.add_argument("--group", type=int,
+                        help=f"Force a specific query group (0-{len(TRADE_GROUPS) - 1})")
     parser.add_argument("--briefing", action="store_true", help="Just print the briefing from cache (no crawl)")
     parser.add_argument("--html", action="store_true", help="Generate HTML report instead of text")
     parser.add_argument("--backup", action="store_true", help="Write a timestamped cache backup")
