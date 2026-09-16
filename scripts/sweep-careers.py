@@ -41,7 +41,8 @@ def load_engine():
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--limit", type=int, default=0, help="0 = all")
-    ap.add_argument("--delay", type=float, default=0.4)
+    # 1.5s: the first run at 0.4s tripped SiteGround WAFs on 22 sites.
+    ap.add_argument("--delay", type=float, default=1.5)
     args = ap.parse_args()
 
     m = load_engine()
@@ -69,7 +70,7 @@ def main():
         dom = v["own_domains"][0]
         before = ((v.get("lead_score") or {}).get("score") or 0)
         try:
-            sq = m.check_website(dom)
+            sq = m.check_website(dom, v.get("trade", ""))
         except Exception as e:
             errors += 1
             print(f"[{i:3}/{len(targets)}] {str(v.get('name'))[:34]:36} ERROR {type(e).__name__}")

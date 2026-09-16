@@ -797,8 +797,11 @@ LOAD_SIGNALS = {
         r"\b24\s*/\s*7\b|\b24\s*-\s*7\b|\b24[\s-]?hour\b|\b24hr\b"
         r"|\bafter[\s-]?hours\b|\bemergency (?:service|line|call|dispatch|repair"
         r"|response|plumber|electrician|hvac)\b|\bsame[\s-]day service\b"
-        r"|\bround[\s-]the[\s-]clock\b|\bopen 24\b|\balways (?:open|available"
-        r"|on[\s-]call)\b|\bon[\s-]call 24\b",
+        r"|\bround[\s-]the[\s-]clock\b|\bopen 24\b|\bon[\s-]call 24\b",
+        # REMOVED after live audit: "always available" / "always open" matched
+        # pure marketing copy on an accounting firm and two law firms. That
+        # phrase asserts nothing about intake volume. A genuine 24/7 claim
+        # ("24/7", "after-hours", "emergency line") is still counted.
         "24/7 / emergency / after-hours service (always-on intake)",
     ),
     "multi_city": (
@@ -820,8 +823,12 @@ LOAD_SIGNALS = {
         # "request a quote" fire on ordinary contact forms every business has —
         # an Accounting and a Consulting site both tripped it. Kept only the
         # tells of a genuinely MANUAL back office.
-        r"call for (?:a )?(?:free )?(?:estimate|quote|consultation)"
-        r"|\bfree (?:estimate|quote|consultation)\b"
+        # Live audit: bare "free consultation" fired on 9 law firms and 3 CPAs —
+        # that is universal professional-services marketing, not manual load.
+        # "free quote" likewise on 3 insurance agencies. Kept the FIELD-work
+        # intake tells (estimates) and the genuinely manual back-office phrases.
+        r"\bcall for (?:a )?(?:free )?estimate\b"
+        r"|\bfree (?:estimate|on[- ]site estimate)\b"
         r"|\bcall (?:us )?today for\b"
         r"|\bdownload (?:the|our) (?:form|pdf|application|brochure)\b"
         r"|\bprint (?:it|this|the form)\b|\bemail (?:it|the form) back\b"
@@ -835,17 +842,34 @@ LOAD_SIGNALS = {
         # boundaries and compiled as literal BACKSPACE chars (\b became \x08),
         # so it could never match anything. Caught by replaying known text
         # through _load_signals instead of trusting the table to be correct.
-        r"\b(?:our )?(?:crew|technicians?|service trucks?|fleet|team of \d+"
-        r"|staff of \d+|\d+ (?:trucks?|vans?|technicians?|crews?))\b",
+        # Live audit: bare "fleet" matched a STAFFING agency, bare "technician"
+        # matched an IT consultancy, and "1 truck" matched an insurance agency
+        # selling truck coverage. Require an OWNED field operation.
+        r"\b(?:our|a) (?:crew|team) of \d+"
+        r"|\bcrew of \d+\b|\bteam of \d+ (?:technicians|professionals|experts)\b"
+        r"|\b\d+ (?:service )?(?:trucks|vans|crews|technicians)\b"
+        r"|\b(?:service|work) (?:trucks|vans|fleet)\b"
+        r"|\bour (?:crew|technicians|installers|service technicians)\b"
+        r"|\bfleet of \d+",
         "crew / fleet / truck count (field dispatch volume)",
     ),
     "permit_driven": (
         4,
-        # "licensed and insured" / "bonded" removed: that phrase is on EVERY
-        # contractor page and measures credibility, not scheduling load. Kept the
-        # permit/inspection language, which implies a scheduling dependency.
-        r"\bpermit(?:s|ting)?\b|\binspection\b|\bcode compliance\b"
-        r"|\bHOA approval\b|\bpermit[- ]driven\b",
+        # Live audit found bare "permit(s)" matching an IMMIGRATION LAW FIRM
+        # ("work permits") and three insurance/property-management pages, and
+        # bare "inspection" matching property managers. A bare noun is not
+        # scheduling load — it needs the CONSTRUCTION sense.
+        # "work permit" dropped: it is immigration terminology ("work permits
+        # and visas"), which is exactly the law-firm false positive this list
+        # exists to avoid. Construction permitting still matches via
+        # building/construction/roofing/electrical/plumbing/mechanical/
+        # residential/city/county.
+        r"\b(?:building|construction|roofing|electrical|plumbing|mechanical"
+        r"|residential|city|county)\s+permit(?:s)?\b"
+        r"|\bpermit (?:required|application|approval|process|inspection|filing)\b"
+        r"|\bcode compliance\b|\bHOA approval\b|\bpermit[- ]driven\b"
+        r"|\b(?:final|city|home|roof|electrical|plumbing) inspection\b"
+        r"|\binspection (?:required|scheduled|before|after)\b",
         "permit- or inspection-driven scheduling",
     ),
 }
@@ -856,8 +880,14 @@ LOAD_SIGNALS = {
 # and [A-Z] under re.I matches lowercase — which made the first draft read
 # "serving residents and businesses" (a real insurance page) as two cities.
 # Compiled WITHOUT re.I so the capitals mean what they say.
+# Compass/reach words are NOT cities: the first version matched a law firm's
+# "serving Southern, Central and Northern" as if it named a service area.
+_CITYLIST_STOPWORDS = {
+    "southern", "northern", "central", "eastern", "western", "north", "south",
+    "east", "west", "inland", "coastal", "the", "and", "all", "areas", "area",
+}
 MULTI_CITY_CITYLIST_CS = re.compile(
-    r"\bserving\s+[A-Z][a-z]+(?:\s*(?:,|and|&)\s*[A-Z][a-z]+)+")
+    r"\bserving\s+([A-Z][a-z]+(?:\s*(?:,|and|&)\s*[A-Z][a-z]+)+)")
 
 LOAD_BOOKING_GAP_WEIGHT = 6
 # Cap on observed load. Below the pillar max (35) so load alone can never fill
@@ -1719,6 +1749,13 @@ def _load_signals(html_lower, complete, gaps=None, trade=None, html_raw=None):
     # the ORIGINAL text — the lowercased copy has destroyed the capitals this
     # pattern depends on.
     _cl = MULTI_CITY_CITYLIST_CS.search(html_raw or "")
+    # require at least 2 REAL city names — a compass run ("Southern, Central and
+    # Northern") is reach, not a service area.
+    if _cl:
+        _cities = [w for w in re.findall(r"[A-Z][a-z]+", _cl.group(1))
+                   if w.lower() not in _CITYLIST_STOPWORDS]
+        if len(_cities) < 2:
+            _cl = None
     if _cl and not any(f["name"] == "multi_city" for f in found):
         found.append({"name": "multi_city", "weight": LOAD_SIGNALS["multi_city"][0],
                       "reason": LOAD_SIGNALS["multi_city"][2],
@@ -3169,22 +3206,37 @@ def _test_qualify_lead():
     # permanent zero on the largest pillar (35 pts) no matter the evidence. It
     # now measures observed load, and these assertions pin BOTH directions:
     # real operational text must fire, advertising copy must not.
+    # Every FP here is a match that ACTUALLY FIRED on a real cached site during
+    # the live audit (e.g. bare "permits" on an immigration law firm, "1 truck"
+    # on an insurance agency, "always available" on a CPA). They are pinned so
+    # the over-firing cannot come back.
     for _fp, _sig in (("call 2470 for service", "emergency_hours"),
                       ("we are serving residents and businesses since 1998", "multi_city"),
+                      ("serving Southern, Central and Northern California", "multi_city"),
                       ("please fill out the form below and we will reply", "manual_intake"),
-                      ("request a quote from our team today", "manual_intake"),
-                      ("we are licensed and insured for your protection", "permit_driven")):
+                      ("contact us for a free consultation", "manual_intake"),
+                      ("get a free quote from our agency", "manual_intake"),
+                      ("we are licensed and insured for your protection", "permit_driven"),
+                      ("we handle work permits and visas", "permit_driven"),
+                      ("our team is always available to help", "emergency_hours"),
+                      ("our technician will help with your network", "crew_or_fleet"),
+                      ("we build your fleet of contractors", "crew_or_fleet"),
+                      ("get a quote for 1 truck today", "crew_or_fleet")):
         _got = [g["name"] for g in _load_signals(_fp.lower(), True, gaps=[],
                                                  trade="Accounting", html_raw=_fp)]
         assert _sig not in _got, f"NWP-LEAD-18 fail: ads scored as load ({_fp[:40]} -> {_got})"
     for _tp, _sig in (("we offer 24/7 emergency service", "emergency_hours"),
                       ("call our after hours line", "emergency_hours"),
+                      ("our emergency plumber is on the way", "emergency_hours"),
                       ("our service area covers the valley", "multi_city"),
                       ("areas we serve include the surrounding towns", "multi_city"),
+                      ("serving Murrieta and Temecula for 20 years", "multi_city"),
                       ("call for a free estimate today", "manual_intake"),
-                      ("most work requires a permit and inspection", "permit_driven"),
+                      ("call today for service", "manual_intake"),
+                      ("a building permit is required for this work", "permit_driven"),
+                      ("we handle the final inspection", "permit_driven"),
                       ("our crew of 12 technicians is ready", "crew_or_fleet"),
-                      ("serving Murrieta and Temecula for 20 years", "multi_city")):
+                      ("we run 3 service trucks daily", "crew_or_fleet")):
         _got = [g["name"] for g in _load_signals(_tp.lower(), True, gaps=[],
                                                  trade="Roofing", html_raw=_tp)]
         assert _sig in _got, f"NWP-LEAD-18 fail: real load missed ({_tp[:40]} -> {_got})"
