@@ -719,6 +719,14 @@ _DOMAIN_BRAND_WORDS = [
     "marketing", "advisors", "advisory", "financial", "finance", "capital",
     "investment", "holdings", "services", "service", "design", "studios", "studio",
     "cpa", "cpas", "tax", "landscape", "tree", "handyman", "plumber", "roofing",
+    # NWP-LEAD-19: the new verticals name themselves in the domain, and the
+    # results feed the outreach name field, so the split has to be readable.
+    # Only matched as a trailing suffix, so these cannot fire mid-word.
+    "garage", "door", "doors", "master", "masters", "precise", "ready", "mix",
+    "concrete", "pool", "pools", "solar", "window", "windows", "fence",
+    "fencing", "flooring", "damage", "restoration", "mold", "water", "trees",
+    "crest", "summit", "coast", "valley", "premier", "quality", "express",
+    "pros", "paving", "maid", "maids", "pest", "locksmith", "moving", "hauling",
 ]
 
 def _domain_brand_name(domain):
@@ -727,6 +735,13 @@ def _domain_brand_name(domain):
     Falls back to the title-cased domain when nothing is derivable."""
     d = re.sub(r'^(https?://)?(www\.)?', '', (domain or "").lower())
     d = re.sub(r'\.[a-z]{2,4}(/.*)?$', '', d).rstrip('/')
+    # NWP-LEAD-19: peel a trailing "ca" state suffix BEFORE word matching.
+    # "armstrongtreeservicesca" otherwise matches nothing (it does not end in
+    # "services" until the "ca" is gone) and came back as one unusable slab.
+    # Done here rather than after the loop so "services"/"tree" still match as
+    # suffixes and the result reads as words.
+    if len(d) > 12 and d.endswith("ca"):
+        d = d[:-2]
     # split on known business words (longest match wins)
     tokens = []
     rest = d
@@ -3118,6 +3133,21 @@ def _test_qualify_lead():
     assert not _is_generic_name("Sanchez & Associates"), "SGW-864 fail: real brand flagged generic"
     assert _domain_brand_name("prudhommecpas.com") == "Prudhomme CPAs", f"SGW-864 fail: domain brand derivation ({_domain_brand_name('prudhommecpas.com')})"
     assert _domain_brand_name("khanattorneys.com") == "Khan Attorneys", f"SGW-864 fail: khan brand ({_domain_brand_name('khanattorneys.com')})"
+    # NWP-LEAD-19: the bare-"City, CA" fix routes REAL leads into this repair
+    # path (their domains are fine; only the scraped name was a page title), so
+    # the derived name has to be presentable enough to use in outreach.
+    for _d, _want in (("murrietagaragedoormasters.com", "Murrieta Garage Door"),
+                      ("temeculaprecisegaragedoor.com", "Temecula Precise Garage"),
+                      ("armstrongtreeservicesca.com", "Armstrong Tree Services"),
+                      ("coppercrestelectric.com", "Copper Crest Electric"),
+                      ("cortspools.com", "Corts Pools"),
+                      ("superiorreadymix.com", "Superior Ready Mix")):
+        _got = _domain_brand_name(_d)
+        assert _got == _want, f"NWP-LEAD-19 fail: brand derivation {_d} -> {_got!r}, want {_want!r}"
+        # an unusable derived name is worse than the junk it replaced
+        assert not _is_generic_name(_got.lower()), \
+            f"NWP-LEAD-19 fail: derived brand still generic ({_got})"
+        assert len(_got) <= 26, f"NWP-LEAD-19 fail: derived brand too long for outreach ({_got})"
 
     # SGW-863: collector registry + failure isolation
     assert collector_enabled("crawl_search"), "SGW-863 fail: default collector should be enabled"
