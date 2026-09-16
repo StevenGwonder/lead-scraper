@@ -2448,9 +2448,36 @@ def qualify_lead(biz, sq):
     # be scored in growth_budget where the 25-cap erased it. Kept OUTSIDE the
     # `verified` block because it comes from the record, not the site read — the
     # same provenance it had before, just moved to the pillar where it survives.
-    if len(phones_list) > 1 or len(biz.get("own_domains", [])) > 1:
+    # NWP-LEAD-19 QC: the `own_domains > 1` clause awarded +8 for "multi-location"
+    # on MERGED records — and on those records the extra domains belong to
+    # DIFFERENT businesses, not to a second location. The reason text gave it
+    # away: "multi-location / multi-phone — 1 lines". Hard evidence in the live
+    # cache: 14 records claimed this award off merged domains; on 4 of them it
+    # was the ONLY thing holding them at Warm (each has a single phone line).
+    # "Murrieta Tree Service" claimed multi-location at score 8 with one phone.
+    #
+    # The load claim is "more lines to answer", and the observable evidence for
+    # that is multiple PHONE NUMBERS on the business. A second domain on the
+    # record is a merge artifact and cannot be observed as a second line
+    # (AGENTS.md §1b: never score what you couldn't observe — UNKNOWN scores 0).
+    # Multiple phones are read off the business's own site; the own_domains
+    # clause is retained ONLY when the domains actually share a brand token,
+    # which is the sole shape that evidences a genuine second location.
+    # A first attempt kept the own_domains clause behind a "same brand" test
+    # (_domains_share_brand). It was too loose in the wrong direction: it matched
+    # on a shared TRAILING TRADE word, so 'pandtautoservice.com' +
+    # 'premierautoservicemurrieta.com' (two unrelated shops) passed on "auto",
+    # and 'temeculaprecisegaragedoor.com' + 'maxgarageservicetemecula.com'
+    # passed on "garage". Both then scored a self-contradictory
+    # "multi-location — 1 lines".
+    #
+    # Dropped entirely. Phone lines are the observable evidence for "more lines
+    # to answer" — they are read off the business's own site. An extra domain on
+    # a record is a merge artifact and is not evidence of a second location
+    # (AGENTS.md §1b: score only what you observed; UNKNOWN scores 0).
+    if len(phones_list) > 1:
         rw += RW["multi_location"]
-        reasons.append(f"multi-location / multi-phone — {len(phones_list)} lines "
+        reasons.append(f"multi-line — {len(phones_list)} phone lines "
                        f"(+{RW['multi_location']})")
     breakdown["repetitive_work"] = min(rw, RW["max"])
 
@@ -3133,6 +3160,31 @@ def _test_qualify_lead():
     assert not _is_generic_name("Sanchez & Associates"), "SGW-864 fail: real brand flagged generic"
     assert _domain_brand_name("prudhommecpas.com") == "Prudhomme CPAs", f"SGW-864 fail: domain brand derivation ({_domain_brand_name('prudhommecpas.com')})"
     assert _domain_brand_name("khanattorneys.com") == "Khan Attorneys", f"SGW-864 fail: khan brand ({_domain_brand_name('khanattorneys.com')})"
+    # NWP-LEAD-19 QC: the multi-location load award must come from OBSERVABLE
+    # phone lines on the business, never from a record's extra domains. Extra
+    # domains are a merge artifact (the worst: 8 unrelated CPA firms under one
+    # record), and a "same brand" heuristic to salvage them matched on shared
+    # TRAILING TRADE words — 'pandtautoservice.com' + 'premierautoservicemurrieta.com'
+    # (two unrelated shops) scored +8 on "auto", and
+    # 'temeculaprecisegaragedoor.com' + 'maxgarageservicetemecula.com' on
+    # "garage", producing the self-contradictory reason "multi-location — 1
+    # lines" with a single phone. The domain clause is gone; pin the behaviour.
+    def _ml(biz_dict, phones):
+        b = dict(biz_dict)
+        b["phones"] = phones
+        b["site_quality"] = {"status": "up", "confidence": "high", "words": 900,
+                             "automation_gaps": [], "load_signals": []}
+        b.setdefault("trade", "Roofing")
+        r = qualify_lead(b, b["site_quality"])
+        return any("phone lines" in x or "multi-location" in x for x in r.get("reasons", [])), \
+            r.get("reasons", [])
+    _hit, _rs = _ml({"own_domains": ["a.com", "b.com"], "eligibility_state": "eligible"},
+                    ["(951) 555-0001"])
+    assert not _hit, f"NWP-LEAD-19 fail: extra domains alone earned multi-location ({_rs})"
+    _hit2, _ = _ml({"own_domains": ["a.com"], "eligibility_state": "eligible"},
+                   ["(951) 555-0001", "(951) 555-0002"])
+    assert _hit2, "NWP-LEAD-19 fail: two phone lines did not earn multi-location"
+
     # NWP-LEAD-19: the bare-"City, CA" fix routes REAL leads into this repair
     # path (their domains are fine; only the scraped name was a page title), so
     # the derived name has to be presentable enough to use in outreach.
