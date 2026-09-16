@@ -38,6 +38,60 @@ python3 benchmark/evaluate.py --top 10 --verbose
   listings and SEO pages as "admin/ops businesses"
 - 8 records are `unknown` (down/blocked + no contact) — correctly quarantined by T9
 
+## Post NWP-LEAD-18 (2026-09-12, live cache, corrected load patterns)
+
+Measured on the live cache after the load-signal rework and the false-positive
+fix. The benchmark fixture is a **frozen 2026-08-04 snapshot with zero
+`load_signals`**, so the new pillar is invisible there — these numbers come from
+the live cache only.
+
+| Metric | Pre-18 | Post-18 |
+|---|---|---|
+| max score | 52 | **60** |
+| records >= 65 (Hot bar) | 0 | **0** |
+| records >= 60 | 0 | 7 |
+| records >= 55 | ~0 | 10 |
+| construction max (Roofing/Electrical/Painting/Landscaping/Tree) | 38 | **55** |
+| records carrying >=1 load signal | n/a | 119 / 276 |
+| eligible | 276 | 276 |
+| own-site hiring pages | 11 | 12 |
+
+Load signals firing: `no_online_booking` 96, `emergency_hours` 45,
+`multi_city` 35, `manual_intake` 25, `crew_or_fleet` 21, `permit_driven` 16.
+
+### The 60 wall — the finding that matters for SGW-953
+
+`digital_footing` awards **nothing** to a business with a working website:
+`ws_low` needs `website_score <= 1`, `ws_2` needs 2, `ws_3` needs 3. A site
+scoring 4-5/5 with no fax and no outdated email earns **df = 0**.
+
+So for any business with a decent website:
+
+```
+repetitive_work max 35 + growth_budget max 25 + digital_footing 0 + named_pain 0 = 60
+Hot bar = 65
+```
+
+**A business with a working website cannot reach Hot unless `named_pain` fires.**
+All 7 records at 60 need exactly +5, and every one has `named_pain = 0`. NWP-LEAD-18
+moved this wall UP (it was 50 before, because construction and non-prior trades
+could not fill `repetitive_work`), but it did not remove it.
+
+Ceiling by website quality with no `named_pain`:
+
+| website_score | df earned | ceiling |
+|---|---|---|
+| 0-1 | 15 | 75 (Hot reachable) |
+| 2 | 8 | 68 (Hot reachable) |
+| 3 | 4 | 64 (just misses) |
+| 4-5 | 0 | **60 (Hot unreachable)** |
+
+`named_pain`'s blocker is **retrieval, not scoring** (see SGW-949): the review
+search returns directory pages ABOUT the business, not complaints BY customers.
+No keyword set can find text the corpus does not contain. So the re-baseline
+will show "max 60, still zero Hot" until a real review-body retrieval path
+exists — that is a build, not a reweight, and it is the honest state to record.
+
 ## Pre-rework baseline (2026-09-12, NWP-LEAD-17 measurement added)
 
 Recorded **before** the NWP-LEAD-18 scoring rework, so it can be compared after.
