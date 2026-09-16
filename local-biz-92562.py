@@ -254,6 +254,18 @@ GENERIC_BUSINESS_NAME_PATTERNS = [
     # "X in City" / "X Near ..." / "X Services" with no brand token
     r'^(home repairs?|handyman services?|plumbing services?|ac repair|repair|services?)\s+(near|nearby|around|in)\b',
     r'^[a-z]+ in (murrieta|temecula|wildomar|menifee|lake elsinore)',
+    # NWP-LEAD-19: a bare "City, CA" page title is a location fragment, NOT a
+    # business name. Real examples in the new verticals: "Murrieta, CA" and
+    # "Temecula, CA" entered as eligible garage-door companies. The existing
+    # rules only caught "<word> in <city>" and "<word> near <city>".
+    r'^(murrieta|temecula|wildomar|menifee|lake elsinore|hemet|perris|'
+    r'fallbrook|escondido|corona|riverside|sun city|winchester|french valley)'
+    r'(\s*,)?\s*(ca|california|9256\d|9259\d)?\s*$',
+    # "<service> in <City>, CA" and "<service>, <City> CA" title shapes that
+    # slipped past the ^[a-z]+ in <city> rule when a state suffix followed.
+    r'^(solar|pool|pools|garage doors?|water damage|mold|restoration|concrete|'
+    r'fencing|flooring|windows|excavation|roofing|painting)\s*'
+    r'(in|near|serving)?\s*[a-z ]*,?\s*(ca|california)\s*$',
     r'^[a-z]+ (near|nearby|around) (me|murrieta|temecula|wildomar)',
     r'^(best|top) .+ (in|near) ',
     # SGW-864 round 3: bare trade+suffix, service-description names, list pages
@@ -3318,6 +3330,18 @@ def _test_qualify_lead():
                     ("https://sunrisesolarinc.com/", "Sunrise Solar Inc")):
         assert not _is_directory_record(_u, _nm), \
             f"NWP-LEAD-19 fail: real business rejected ({_u})"
+    # A bare "City, CA" page title is a location fragment, not a business name.
+    # "Murrieta, CA" and "Temecula, CA" entered the new verticals as eligible
+    # garage-door companies before this rule.
+    for _t in ("murrieta, ca", "temecula, ca", "wildomar, ca", "menifee ca",
+               "lake elsinore, ca", "temecula, california"):
+        assert _is_generic_name(_t), f"NWP-LEAD-19 fail: city title treated as a name ({_t})"
+    # ...and real names in the same verticals still survive.
+    for _t in ("Landmark Doors", "Corts Pools", "RCR Environmental",
+               "Paradise Pool Spa Care", "OC Solar", "Murrieta Garage Door Masters",
+               "Sunrise Solar Inc", "Temecula Water Damage"):
+        assert not _is_generic_name(_t.strip().lower()), \
+            f"NWP-LEAD-19 fail: real name rejected ({_t})"
 
     # ── NWP-LEAD-18: observed operational load ──
     # repetitive_work was two trade-membership doors, so construction scored a
