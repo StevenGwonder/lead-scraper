@@ -859,13 +859,72 @@ BOOKING_MARKERS = {
 }
 # Outdated email providers — digital laggard signal
 OUTDATED_EMAIL_DOMAINS = ("hotmail.com", "aol.com", "yahoo.com", "hotmail", "aol", "yahoo")
-# Review complaint keywords — negative review buying signal
+# ── Review complaint keywords — negative review buying signal (SGW-949) ──
+#
+# These are matched as PHRASES against search-result snippets, so a bare token
+# is dangerous: it fires on the business ADVERTISING the thing we treat as pain.
+# The old list carried bare "slow" and bare "voicemail", which flagged:
+#   "We fix slow drains and slow leaks fast. 4.8 stars"      -> pain
+#   "Leave a voicemail and we'll call back same day"         -> pain
+#   "slow growth pruning services, 4.9 stars"                -> pain
+# Every one is a business selling a service, scored as a customer complaining.
+#
+# Rule: a complaint is a sentence ABOUT the business being hard to reach. It
+# needs an unfulfilled-action phrase, not a topic word.
 REVIEW_COMPLAINT_KEYWORDS = [
-    "slow", "no response", "didn't call back", "didn't respond",
-    "unresponsive", "never showed up", "no-show", "never called",
-    "didn't show", "poor communication", "hard to reach",
-    "voicemail", "never returned", "didn't return my call",
+    "no response", "never responded", "didn't respond", "did not respond",
+    "never called back", "didn't call back", "did not call back",
+    "never returned my call", "didn't return my call", "never returned",
+    "never called", "never showed up", "didn't show up", "did not show",
+    "no-show", "never showed", "hard to reach", "impossible to reach",
+    "couldn't reach", "could not reach", "unreachable",
+    "unresponsive", "poor communication", "no communication",
+    "left three voicemails", "left multiple voicemails",
+    "ignored my calls", "ignored my emails",
+    "waited days", "still waiting", "took weeks", "took forever",
+    "no one answers", "nobody answers", "no one answered", "nobody answered",
+    "wouldn't answer", "would not answer", "does not answer", "doesn't answer",
+    "phone goes to voicemail", "goes straight to voicemail",
+    "no follow up", "no follow-up", "didn't follow up", "never followed up",
 ]
+
+# SGW-949 part B, second belt: a bare *responsiveness* token only counts as pain
+# when it sits near a call/answer/respond token. Keeps "slow drains" out while
+# still catching "slow to respond", which no phrase catches.
+REVIEW_PAIN_PROXIMITY = {
+    # token that is only pain in context -> context tokens
+    "slow": ("to respond", "to call", "to answer", "to get back", "response",
+             "callback", "call back", "reply"),
+    "voicemail": ("left", "goes to", "went to", "straight to", "never",
+                  "no one", "nobody", "again", "return"),
+    "rude": ("staff", "phone", "receptionist", "office", "on the phone"),
+}
+PAIN_PROXIMITY_WINDOW = 6  # words
+
+
+def _review_complaint_hits(text):
+    """Which complaint phrases appear in `text` (already lowercased)?
+
+    Returns the matched phrases. A phrase must match as a phrase, and a bare
+    proximity token only counts within PAIN_PROXIMITY_WINDOW words of context.
+    """
+    t = (text or "").lower()
+    if not t:
+        return []
+    hits = [kw for kw in REVIEW_COMPLAINT_KEYWORDS if kw in t]
+    words = re.findall(r"[a-z']+", t)
+    for tok, ctxs in REVIEW_PAIN_PROXIMITY.items():
+        for i, w in enumerate(words):
+            if w != tok:
+                continue
+            lo = max(0, i - PAIN_PROXIMITY_WINDOW)
+            hi = min(len(words), i + PAIN_PROXIMITY_WINDOW + 1)
+            window = " ".join(words[lo:hi])
+            if any(c in window for c in ctxs):
+                if tok not in hits:
+                    hits.append(tok)
+                break
+    return hits
 
 # Clean name suffixes — ponytail: extracted constant replaces 20 inline ifs
 NAME_SUFFIXES = [
@@ -1949,7 +2008,6 @@ def search_review_signals(biz_name, cache_key, cache):
         return bool(cached.get("review_signals", []))
     
     review_results = []
-    negative_found = False
     results = searx_search(f"{biz_name} reviews", limit=8, delay=6)
     name_words = _distinctive_name_tokens(biz_name)
     for r in results:
@@ -1964,17 +2022,33 @@ def search_review_signals(biz_name, cache_key, cache):
         # SGW-864/865: skip reviews about far-away cities (Yelp NYC noise)
         if _mentions_out_of_area(combined):
             continue
-        # Check for complaint keywords
-        complaints = [kw for kw in REVIEW_COMPLAINT_KEYWORDS if kw in combined]
-        if complaints:
-            negative_found = True
-        # Only store results that look like reviews (have "review" or rating in them)
-        if any(kw in combined for kw in ["review", "rating", "star", "yelp", "google"]):
+        # SGW-949 part A: complaint detection now uses phrase + proximity rules
+        # instead of bare substring tokens. See _review_complaint_hits().
+        complaints = _review_complaint_hits(combined)
+        review_like = any(kw in combined for kw in ("review", "rating", "star", "yelp", "google"))
+        # SGW-949 part A: ONE POPULATION. This used to store only "review-like"
+        # results while `negative_found` was set from EVERY filtered result, so a
+        # complaint could set review_negative=True and be permanently uncountable
+        # by corroborated(), which reads only what was stored. Measured on the
+        # benchmark: 3 records flagged, 0 corroborated, 0 points — the pillar was
+        # dead by construction.
+        #
+        # Now every complaint-bearing result is stored (that is what makes the
+        # flag countable), and `is_review_like` records how strong the source is
+        # instead of silently discarding it. Non-complaint results that merely
+        # look like reviews are still kept as context.
+        if complaints or review_like:
+            # SGW-949: store 400 chars, not 120. At 120, 150 of 166 stored
+            # signals on the benchmark were cut mid-sentence — e.g. a genuine
+            # Murrieta complaint ended at "...to get " and the rest, including
+            # the words that identify it as a complaint, was discarded. The
+            # stored record must be long enough to justify the flag it carries.
             review_results.append({
                 "title": r.get("title", "")[:70],
-                "snippet": (r.get("content", "") or "")[:120],
+                "snippet": (r.get("content", "") or "")[:400],
                 "url": r.get("url", ""),
                 "complaints": complaints,
+                "is_review_like": bool(review_like),
                 "observed_at": datetime.now(timezone.utc).isoformat(),
                 # SGW-942 B2: same provenance rule as hiring signals — an
                 # unrecognised host is `other`, never `own_site`.
@@ -1986,11 +2060,22 @@ def search_review_signals(biz_name, cache_key, cache):
     # Store in cache
     if cache_key not in cache.get("businesses", {}):
         cache["businesses"][cache_key] = {}
-    cache["businesses"][cache_key]["review_signals"] = review_results[:5]
-    cache["businesses"][cache_key]["review_negative"] = negative_found
+    # SGW-949 part A: `review_negative` is now DERIVED from the stored list that
+    # corroborated() reads, so no record can ever be flagged and uncountable.
+    # If corroborated() says a complaint exists, the flag says so too.
+    #
+    # The [:5] cap must not be able to sever the link again: keep every
+    # complaint-bearing result, and fill the remaining slots with review-looking
+    # context. Otherwise a complaint ranked 6th+ would set the flag and be
+    # discarded by the slice — the exact defect this card exists to fix.
+    _complaint_rows = [r for r in review_results if r.get("complaints")]
+    _context_rows = [r for r in review_results if not r.get("complaints")]
+    _stored = _complaint_rows + _context_rows[:max(0, 5 - len(_complaint_rows))]
+    cache["businesses"][cache_key]["review_signals"] = _stored
+    cache["businesses"][cache_key]["review_negative"] = bool(_complaint_rows)
     cache["businesses"][cache_key]["review_checked"] = True
     cache["businesses"][cache_key]["review_checked_at"] = datetime.now(timezone.utc).isoformat()  # SGW-939 freshness
-    return negative_found
+    return bool(_complaint_rows)
 
 
 def corroborated(review_signals):
@@ -2817,6 +2902,42 @@ def _test_qualify_lead():
         "SGW-943 fail: a FOUND marker is PRESENT — it can never be a gap"
     assert _may_assert_gap(False, ["HubSpot"]) is False, \
         "SGW-943 fail: a found marker is not a gap on a complete read either"
+
+    # ── SGW-949: the named_pain pillar must fire WITHOUT becoming a
+    # false-positive generator. Both halves are asserted together because
+    # repairing corroboration alone makes the engine worse: it would start
+    # awarding 25 points off sales copy like "we fix slow drains".
+    for _fp in ("Acme Plumbing — Yelp Reviews. We fix slow drains and slow leaks fast. 4.8 stars",
+                "Best Roofing Co reviews — Leave a voicemail and we'll call back same day. 5 star rating",
+                "Tree Service reviews — slow growth pruning services, 4.9 stars google"):
+        assert not _review_complaint_hits(_fp), \
+            f"SGW-949 fail: sales copy scored as customer pain ({_fp[:50]})"
+    for _tp in ("technician was slow to arrive, never called back",
+                "I called three times and got no response at all",
+                "left three voicemails and nobody called me back",
+                "impossible to reach anyone, poor communication",
+                "they never showed up for the appointment",
+                "very slow to respond to my emails",
+                "rude receptionist on the phone"):
+        assert _review_complaint_hits(_tp), \
+            f"SGW-949 fail: genuine complaint missed ({_tp[:50]})"
+    # part A: the flag and the counted population are the same set. Two
+    # complaint-bearing rows must corroborate; ONE must flag without scoring
+    # (the card keeps a single mention as a weak signal, never 25 points).
+    _rows2 = [{"complaints": ["no response"], "is_review_like": False},
+              {"complaints": ["never called back"], "is_review_like": False}]
+    assert any(r.get("complaints") for r in _rows2) and corroborated(_rows2), \
+        "SGW-949 fail: two stored complaints did not corroborate"
+    _rows1 = [{"complaints": ["no response"], "is_review_like": False}]
+    assert any(r.get("complaints") for r in _rows1) and not corroborated(_rows1), \
+        "SGW-949 fail: a single complaint must not award points"
+    _crow = [r for r in ([{"complaints": []}] * 8 + [{"complaints": ["slow"]}])
+             if r.get("complaints")]
+    _ctx = [r for r in ([{"complaints": []}] * 8 + [{"complaints": ["slow"]}])
+            if not r.get("complaints")]
+    _stored = _crow + _ctx[:max(0, 5 - len(_crow))]
+    assert _crow and any(r.get("complaints") for r in _stored), \
+        "SGW-949 fail: the [:5] cap severed a complaint from the counted set"
 
     p = pitch_for({"trade": "Accounting", "review_negative": True})
     assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
