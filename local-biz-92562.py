@@ -768,6 +768,106 @@ TRADE_GROUPS = [
 ADMIN_TRADES = {"Accounting", "Law Office", "Insurance", "Property Management",
                 "Recruiting", "Consulting"}
 
+# ── NWP-LEAD-18: OBSERVED OPERATIONAL LOAD ─────────────────────────────
+#
+# WHY: repetitive_work is the largest pillar (35 pts) and had exactly two doors
+# in — `trade in ADMIN_TRADES` (+25) or `appt trade + no booking` (+10). Roofing,
+# Electrical, Painting, Landscaping and Tree Service are in NEITHER, so they
+# scored a permanent ZERO on the biggest pillar regardless of evidence: a roofer
+# running twelve trucks and a 24/7 emergency line scored identically to a roofer
+# with a one-pager and a cell phone. Measured: construction topped out at 65
+# (the Hot bar exactly, needing a perfect signal storm) and a roofer actively
+# hiring a receptionist with a 0/5 site was COLD at 30.
+#
+# The pillar now measures what the ICP actually describes — how much manual
+# intake/dispatch work the business visibly carries — from the site we already
+# fetch. Admin/ops stays as ONE contributing prior, not the sole gate.
+#
+# Every pattern below describes WORK VOLUME (many jobs, many sites, always-on),
+# never marketing copy. `_load_signals` requires the page to have been fully read
+# (AGENTS.md 1b) — a truncated or unread page yields no load signals at all.
+LOAD_SIGNALS = {
+    # name -> (weight, pattern, reason)
+    "emergency_hours": (
+        8,
+        # BOUNDARIES ARE LOAD-BEARING. The first draft used `24[/ ]?7`, which is a
+        # bare substring that fires on ANY "247" inside a longer digit run — the
+        # identical defect class as the `mbo`->"symbol" marker bug. Verified
+        # over-firing on a real plumbing page (9879 words, no 24/7 claim).
+        r"\b24\s*/\s*7\b|\b24\s*-\s*7\b|\b24[\s-]?hour\b|\b24hr\b"
+        r"|\bafter[\s-]?hours\b|\bemergency (?:service|line|call|dispatch|repair"
+        r"|response|plumber|electrician|hvac)\b|\bsame[\s-]day service\b"
+        r"|\bround[\s-]the[\s-]clock\b|\bopen 24\b|\balways (?:open|available"
+        r"|on[\s-]call)\b|\bon[\s-]call 24\b",
+        "24/7 / emergency / after-hours service (always-on intake)",
+    ),
+    "multi_city": (
+        6,
+        # Must be an EXPLICIT service-area statement. First draft matched
+        # "serving residents and businesses" (a real insurance page) as a city —
+        # "serving <any word>" is not multi-city coverage.
+        # `serving <Capitalized>` was removed after it matched a real insurance
+        # page's "serving residents and businesses" as if it named a city. A city
+        # named in "serving X" needs a place list, so require 2+ names or an
+        # explicit area phrase.
+        r"\bservice area\b|\bareas? we serve\b|\bcommunities we serve\b"
+        r"|\bcoverage area\b|\bwe serve (?:the )?(?:cities|towns|counties|communities)\b",
+        "multi-city service area (dispatch load)",
+    ),
+    "manual_intake": (
+        5,
+        # Weak phrases removed after verification: "fill out the form" and
+        # "request a quote" fire on ordinary contact forms every business has —
+        # an Accounting and a Consulting site both tripped it. Kept only the
+        # tells of a genuinely MANUAL back office.
+        r"call for (?:a )?(?:free )?(?:estimate|quote|consultation)"
+        r"|\bfree (?:estimate|quote|consultation)\b"
+        r"|\bcall (?:us )?today for\b"
+        r"|\bdownload (?:the|our) (?:form|pdf|application|brochure)\b"
+        r"|\bprint (?:it|this|the form)\b|\bemail (?:it|the form) back\b"
+        r"|\ballow 24[\s-]?48 hours\b"
+        r"|\bwe(?:'| wi)ll (?:call|get back|respond) within\b",
+        "manual estimate/quote intake (call or email a form)",
+    ),
+    "crew_or_fleet": (
+        5,
+        # NOTE: the first draft of this pattern was written with over-escaped
+        # boundaries and compiled as literal BACKSPACE chars (\b became \x08),
+        # so it could never match anything. Caught by replaying known text
+        # through _load_signals instead of trusting the table to be correct.
+        r"\b(?:our )?(?:crew|technicians?|service trucks?|fleet|team of \d+"
+        r"|staff of \d+|\d+ (?:trucks?|vans?|technicians?|crews?))\b",
+        "crew / fleet / truck count (field dispatch volume)",
+    ),
+    "permit_driven": (
+        4,
+        # "licensed and insured" / "bonded" removed: that phrase is on EVERY
+        # contractor page and measures credibility, not scheduling load. Kept the
+        # permit/inspection language, which implies a scheduling dependency.
+        r"\bpermit(?:s|ting)?\b|\binspection\b|\bcode compliance\b"
+        r"|\bHOA approval\b|\bpermit[- ]driven\b",
+        "permit- or inspection-driven scheduling",
+    ),
+}
+# "no online booking" is manual-scheduling evidence for ANY trade. Appointment
+# trades already receive their own +10 award for it, so this load version is
+# applied only to NON-appointment trades to avoid double-counting.
+# Case-SENSITIVE: a city list in "serving X and Y" is capitalized in practice,
+# and [A-Z] under re.I matches lowercase — which made the first draft read
+# "serving residents and businesses" (a real insurance page) as two cities.
+# Compiled WITHOUT re.I so the capitals mean what they say.
+MULTI_CITY_CITYLIST_CS = re.compile(
+    r"\bserving\s+[A-Z][a-z]+(?:\s*(?:,|and|&)\s*[A-Z][a-z]+)+")
+
+LOAD_BOOKING_GAP_WEIGHT = 6
+# Cap on observed load. Below the pillar max (35) so load alone can never fill
+# repetitive_work, and can never bypass the admin/ops prior the card retains.
+LOAD_SIGNAL_MAX = 28
+# Threshold at which observed load alone is a strong enough reason to qualify a
+# lead for Hot (the pillar also awards +25 for an admin/ops prior, so this sits
+# below that: a construction business needs real, multi-signal load).
+LOAD_HOT_MIN = 14
+
 # T6: Roles where hiring = "you're about to pay a human to do agent work"
 AUTOMATABLE_ROLES = [
     "receptionist", "front desk", "scheduler", "scheduling", "intake",
@@ -952,6 +1052,12 @@ SCORING = {
         "max": 35,
         "admin_ops": 25,                # trade in ADMIN_TRADES (verified site only)
         "appointment_no_booking": 10,   # appt trade + no booking system (verified)
+        # NWP-LEAD-18: observed multi-location/multi-line complexity is LOAD, not
+        # budget — a second line is a second thing to answer. It used to sit in
+        # growth_budget where an automatable-role hire (25) filled that pillar to
+        # its cap and silently SWALLOWED it, so the complexity earned nothing on
+        # exactly the businesses most likely to carry it.
+        "multi_location": 8,
     },
     "named_pain": {             # T5: Have customers stated the exact pain we solve?
         "max": 25,
@@ -963,9 +1069,24 @@ SCORING = {
         "automatable_role_weak": 15,    # role match but only aggregator-echo evidence
         "generic_hiring": 12,           # generic hiring signal
         "generic_hiring_weak": 6,       # generic hiring, aggregator-echo only
-        "multi_signal": 8,              # 2+ phones OR 2+ domains = operational complexity
+        "multi_signal": 8,              # LEGACY: superseded by repetitive_work
+                                        # "multi_location" (see NWP-LEAD-18). Kept
+                                        # in the table so old cache/readers don't
+                                        # KeyError; no longer awarded here.
         "trade_admin": 8,               # ADMIN_TRADES prior (verified only)
         "trade_appt": 5,                # appointment trade prior (verified only)
+        # NWP-LEAD-18: observed operational SCALE is budget evidence — AGENTS.md
+        # §2 Tier 1 lists "multiple locations / multiple phone lines / a careers
+        # page" as operational complexity + budget to fix it. Without this a
+        # construction business carrying heavy observed load had NO budget
+        # pillar at all (hiring absent, trade prior absent) and could not reach
+        # the Hot bar however much load it showed.
+        #
+        # It cannot inflate a hiring business: this pillar caps at 25 and an
+        # automatable-role hire alone already awards 25, so observed_scale only
+        # ever changes the score of a business that has NO hiring evidence —
+        # exactly the construction case this issue exists for.
+        "observed_scale": 20,
     },
     "digital_footing": {        # T2: Enough maturity to integrate with? Real gaps?
         "max": 15,
@@ -1573,6 +1694,44 @@ def parse_jsonld(html):
     return out
 
 
+def _load_signals(html_lower, complete, gaps=None, trade=None, html_raw=None):
+    """NWP-LEAD-18: observed operational-load signals from a FULLY READ page.
+
+    Returns a list of {"name","weight","reason","match"} dicts. Each dict is a
+    PRESENT-state observation, not an inference — the pattern matched actual page
+    text. `complete=False` (truncated or unreadable read) returns [] so no
+    point can be awarded from a page we could not observe (AGENTS.md §1b:
+    PRESENT scores, UNKNOWN never does).
+
+    A missing online booking flow is also load for any NON-appointment trade
+    (manual scheduling = phone tag); appointment trades already score that gap
+    separately, so it is skipped for them to avoid double-counting.
+    """
+    if not complete or not html_lower:
+        return []
+    found = []
+    for _name, (_weight, _pat, _reason) in LOAD_SIGNALS.items():
+        m = re.search(_pat, html_lower, re.I)
+        if m:
+            found.append({"name": _name, "weight": _weight, "reason": _reason,
+                          "match": m.group(0)[:60]})
+    # case-sensitive city-list check (see MULTI_CITY_CITYLIST_CS). Must run on
+    # the ORIGINAL text — the lowercased copy has destroyed the capitals this
+    # pattern depends on.
+    _cl = MULTI_CITY_CITYLIST_CS.search(html_raw or "")
+    if _cl and not any(f["name"] == "multi_city" for f in found):
+        found.append({"name": "multi_city", "weight": LOAD_SIGNALS["multi_city"][0],
+                      "reason": LOAD_SIGNALS["multi_city"][2],
+                      "match": _cl.group(0)[:60]})
+    if gaps and trade not in SCORING["appointment_trades"]:
+        if any(g in gaps for g in ("no booking system", "no booking/chat system")):
+            found.append({"name": "no_online_booking",
+                          "weight": LOAD_BOOKING_GAP_WEIGHT,
+                          "reason": "no online booking despite demand (manual scheduling)",
+                          "match": "booking gap"})
+    return found
+
+
 def _base_result(status, confidence, gaps):
     """Base result dict for check_website — avoids repeating 13 keys 4 times."""
     return {"status": status, "confidence": confidence,
@@ -1687,7 +1846,7 @@ def _fetch_html(url, timeout=FETCH_TIMEOUT, retries=1):
     return {"ok": False, "reason": "unreachable", "code": None}
 
 
-def check_website(domain):
+def check_website(domain, trade=""):
     """Robust, honest website check. Deep read (150KB), 20s timeout + retry,
     www/non-www fallback, and a /contact + /about crawl to fill phone/contact gaps
     so we stop reporting false "no phone / no contact" on pages that are fine.
@@ -1886,9 +2045,19 @@ def check_website(domain):
                 "verbs": verbs[:3],
             }
 
+    # NWP-LEAD-18: observed operational load. `complete` = the read was not
+    # truncated, so the page can actually be observed (AGENTS.md §1b). Scanned
+    # over the COMBINED html (homepage + contact/about + careers) so an
+    # after-hours line advertised on the contact page still counts.
+    # gaps must be computed first so the booking-gap load signal can see them
+    load = _load_signals(combined_lower, complete=not page_truncated,
+                         gaps=gaps, trade=trade, html_raw=combined)
+
     return {"status": "up", "confidence": "high",
             "website_score": website_score, "automation_gaps": gaps,
             "own_site_hiring": own_site_hiring,
+            "load_signals": load,
+            "load_signal_total": min(sum(s["weight"] for s in load), LOAD_SIGNAL_MAX),
             "platform": platform, "words": words, "phones": page_phones,
             "has_crm": crm_tools, "has_analytics": analytics_tools,
             "has_marketing_tools": marketing_tools,
@@ -2109,7 +2278,11 @@ def qualify_lead(biz, sq):
     phones_list = biz.get("phones", [])
     emails = biz.get("emails", []) or sq.get("emails", [])
 
-    # ── REPETITIVE-WORK LOAD (T3: admin/ops trade or appt trade + no booking) ──
+    # ── REPETITIVE-WORK LOAD (T3 / NWP-LEAD-18) ──
+    # Was: two trade-membership doors, so Roofing/Electrical/Painting/
+    # Landscaping/Tree Service scored a permanent zero on the largest pillar
+    # (35 pts) no matter what the evidence showed. Now it measures observed
+    # operational load, with the admin/ops prior as ONE contributing signal.
     rw = 0
     if verified:
         if trade in ADMIN_TRADES:
@@ -2120,6 +2293,24 @@ def qualify_lead(biz, sq):
         ):
             rw += RW["appointment_no_booking"]
             reasons.append(f"appointment trade with no booking system (+{RW['appointment_no_booking']})")
+        # Observed load — works for EVERY trade, including construction. Only
+        # PRESENT signals from a fully-read page are counted (the read is
+        # already gated on `verified`), capped so load alone cannot fill the
+        # pillar and bypass the trade prior.
+        _load = sq.get("load_signals") or []
+        if _load:
+            _lw = min(sum(s.get("weight", 0) for s in _load), LOAD_SIGNAL_MAX)
+            rw += _lw
+            _names = ", ".join(s.get("name", "") for s in _load[:4])
+            reasons.append(f"observed operational load: {_names} (+{_lw})")
+    # Multi-location / multi-phone is LOAD (more lines to answer), and it used to
+    # be scored in growth_budget where the 25-cap erased it. Kept OUTSIDE the
+    # `verified` block because it comes from the record, not the site read — the
+    # same provenance it had before, just moved to the pillar where it survives.
+    if len(phones_list) > 1 or len(biz.get("own_domains", [])) > 1:
+        rw += RW["multi_location"]
+        reasons.append(f"multi-location / multi-phone — {len(phones_list)} lines "
+                       f"(+{RW['multi_location']})")
     breakdown["repetitive_work"] = min(rw, RW["max"])
 
     # ── NAMED PAIN (external signal — exempt from verified gate) ──
@@ -2171,10 +2362,21 @@ def qualify_lead(biz, sq):
         elif trade in SCORING["appointment_trades"]:
             gb += GB["trade_appt"]
             reasons.append(f"appointment trade — budget proxy (+{GB['trade_appt']})")
-    # Multi-location / multi-phone = operational complexity, independent of site read
-    if len(phones_list) > 1 or len(biz.get("own_domains", [])) > 1:
-        gb += GB["multi_signal"]
-        reasons.append(f"multi-location / multi-phone (+{GB['multi_signal']})")
+        # NWP-LEAD-18: observed multi-site / multi-line scale is budget evidence
+        # for trades with no prior at all (construction). Tier-1 of the ICP per
+        # AGENTS.md §2. Deliberately in the `elif` chain: a business WITH hiring
+        # evidence never reaches this branch, so this cannot inflate one.
+        _scale = (sq.get("load_signal_total") or 0) if (len(phones_list) > 1
+                 or len(biz.get("own_domains", [])) > 1) else 0
+        if _scale >= LOAD_HOT_MIN:
+            gb += GB["observed_scale"]
+            reasons.append(f"observed multi-site/multi-line scale — budget proxy "
+                           f"(+{GB['observed_scale']})")
+    # NWP-LEAD-18 CAP COLLISION FIX: multi-location/multi-phone used to add to
+    # growth_budget, whose max is 25 — and an automatable-role hire alone awards
+    # 25, so the cap SWALLOWED it. Real operational complexity therefore earned
+    # nothing on exactly the businesses most likely to have it. It now scores as
+    # LOAD in repetitive_work (see below), where it cannot be erased.
     breakdown["growth_budget"] = min(gb, GB["max"])
 
     # ── DIGITAL FOOTING (T2: down/blocked capped low; verified earns full range) ──
@@ -2225,8 +2427,24 @@ def qualify_lead(biz, sq):
         pain_dim = 2  # uncorroborated complaint = weak signal, not zero
     fit_dim = 0
     if verified:
-        fit_dim = 10 if trade in ADMIN_TRADES else (7 if trade in SCORING["appointment_trades"] else 4)
-    capacity_dim = min(10, breakdown["growth_budget"] // 2)
+        # NWP-LEAD-18: fit reflects MEASURED load, not a flat per-trade constant.
+        # Construction used to get a flat 4/10 regardless of evidence — a roofer
+        # with twelve trucks and a 24/7 line scored the same as a one-pager with
+        # a cell phone.
+        _base_fit = 10 if trade in ADMIN_TRADES else (
+            7 if trade in SCORING["appointment_trades"] else 4)
+        # load raises fit; a construction business with substantial observed load
+        # can reach the fit a trade prior alone would give an admin/ops business
+        _load_pts = min(10, breakdown["repetitive_work"] // 4)
+        fit_dim = min(10, max(_base_fit, _load_pts))
+    # NWP-LEAD-18: capacity is "can they pay". Observed operational SCALE is
+    # budget evidence per AGENTS.md §2 Tier 1 ("multiple locations / multiple
+    # phone lines → operational complexity + budget to fix it"). Without this a
+    # construction business carrying heavy observed load had capacity_dim = 0 and
+    # could never satisfy the Hot gate (pain + capacity >= 8) no matter how much
+    # load it showed — the same trade blind-spot, relocated.
+    _scale_pts = min(8, (sq.get("load_signal_total") or 0) // 2)
+    capacity_dim = min(10, breakdown["growth_budget"] // 2 + _scale_pts)
     action_dim = 0
     if contactable:
         action_dim += 5
@@ -2244,10 +2462,17 @@ def qualify_lead(biz, sq):
     # ── SGW-866: DETERMINISTIC ROUTING (replaces blended-tier-only rules) ──
     # priority — real, contactable, admin/ops-heavy, AND a reason (pain or
     # hiring or strong trade prior). Gap-stacking can never route here.
+    # NWP-LEAD-18: substantial OBSERVED load is a strong reason on its own. A
+    # construction business that visibly runs 24/7 emergency intake, a multi-city
+    # service area and manual quote flow carries exactly the drag we remove, and
+    # can now qualify without being an admin/ops trade. Requires a verified read
+    # (the load came from the page) AND enough of it to be meaningful.
+    _observed_load = verified and breakdown["repetitive_work"] >= LOAD_HOT_MIN
     hot_qualifier = (
         (biz.get("review_negative") and corroborated(review_signals))
         or hiring_role_match
         or (trade in ADMIN_TRADES and verified)
+        or _observed_load
     )
     if (contactable and hot_qualifier and total >= SCORING["tiers"]["hot"]
             and pain_dim + capacity_dim >= 8):
@@ -2938,6 +3163,40 @@ def _test_qualify_lead():
     _stored = _crow + _ctx[:max(0, 5 - len(_crow))]
     assert _crow and any(r.get("complaints") for r in _stored), \
         "SGW-949 fail: the [:5] cap severed a complaint from the counted set"
+
+    # ── NWP-LEAD-18: observed operational load ──
+    # repetitive_work was two trade-membership doors, so construction scored a
+    # permanent zero on the largest pillar (35 pts) no matter the evidence. It
+    # now measures observed load, and these assertions pin BOTH directions:
+    # real operational text must fire, advertising copy must not.
+    for _fp, _sig in (("call 2470 for service", "emergency_hours"),
+                      ("we are serving residents and businesses since 1998", "multi_city"),
+                      ("please fill out the form below and we will reply", "manual_intake"),
+                      ("request a quote from our team today", "manual_intake"),
+                      ("we are licensed and insured for your protection", "permit_driven")):
+        _got = [g["name"] for g in _load_signals(_fp.lower(), True, gaps=[],
+                                                 trade="Accounting", html_raw=_fp)]
+        assert _sig not in _got, f"NWP-LEAD-18 fail: ads scored as load ({_fp[:40]} -> {_got})"
+    for _tp, _sig in (("we offer 24/7 emergency service", "emergency_hours"),
+                      ("call our after hours line", "emergency_hours"),
+                      ("our service area covers the valley", "multi_city"),
+                      ("areas we serve include the surrounding towns", "multi_city"),
+                      ("call for a free estimate today", "manual_intake"),
+                      ("most work requires a permit and inspection", "permit_driven"),
+                      ("our crew of 12 technicians is ready", "crew_or_fleet"),
+                      ("serving Murrieta and Temecula for 20 years", "multi_city")):
+        _got = [g["name"] for g in _load_signals(_tp.lower(), True, gaps=[],
+                                                 trade="Roofing", html_raw=_tp)]
+        assert _sig in _got, f"NWP-LEAD-18 fail: real load missed ({_tp[:40]} -> {_got})"
+    # AGENTS.md 1b: a page we could NOT observe yields no load at all
+    assert _load_signals("24/7 emergency service", False) == [], \
+        "NWP-LEAD-18 fail: load scored from a truncated/unread page"
+    # every pattern must be a well-formed 3-tuple with no literal control chars
+    # (the first crew_or_fleet draft compiled \b into a BACKSPACE and matched nothing)
+    for _n, _t in LOAD_SIGNALS.items():
+        assert len(_t) == 3, f"NWP-LEAD-18 fail: {_n} is not a 3-tuple"
+        assert "\x08" not in _t[1], f"NWP-LEAD-18 fail: {_n} pattern has a literal backspace"
+        re.compile(_t[1])
 
     p = pitch_for({"trade": "Accounting", "review_negative": True})
     assert "miss" in p, f"research fail: pitch not outcome-first ({p})"
@@ -5015,7 +5274,8 @@ def reverify_cached_contact_paths(cache, limit=20):
         domain = (biz.get("own_domains") or [""])[0] or biz.get("url", "")
         if not domain:
             continue
-        sq = run_collector("website_check", check_website, domain)
+        sq = run_collector("website_check", check_website, domain,
+                           rec.get("trade", ""))
         if not isinstance(sq, dict) or sq.get("status") != "up" \
                 or sq.get("confidence") != "high":
             continue  # unreadable now → leave the record exactly as it was
@@ -5356,7 +5616,8 @@ def main():
         checked_domains.add(domain)
         if biz.get("site_quality") and biz["site_quality"].get("website_score", -2) >= 0:
             continue  # Already successfully checked
-        biz["site_quality"] = run_collector("website_check", check_website, domain)
+        biz["site_quality"] = run_collector("website_check", check_website, domain,
+                                            biz.get("trade", ""))
         sq = biz["site_quality"]
         if sq is None:
             sq = {"status": "unknown", "confidence": "low", "automation_gaps": [], "emails": []}
