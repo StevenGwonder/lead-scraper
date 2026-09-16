@@ -5,6 +5,9 @@ Offline evaluation: loads benchmark/prospects.json + benchmark/labels.json,
 re-runs the CURRENT scoring pipeline (qualify_lead from local-biz-92562.py)
 on the fixture, and reports:
   * precision@5, precision@10  (good_fit = positive; possible_fit reported separately)
+  * recall@10 — of ALL good_fit records, how many reach the top 10 (NWP-LEAD-17)
+  * `good_fit below Warm` — qualified leads discarded into Cold (NWP-LEAD-17)
+  * good_fit rank distribution (NWP-LEAD-17, promoted to a first-class metric)
   * false-positive count in the ranked top-10
   * unverified count (records whose label is unknown OR tier is Unverified)
   * tier confusion matrix (pipeline tier vs. human label)
@@ -124,9 +127,42 @@ def main():
     fp_top10 = [k for _, k, _, lbl, _ in top10 if lbl.get("label") == "bad_fit"]
     unverified = [k for _, k, _, lbl, _ in ranked if lbl.get("label") == "unknown"]
 
+    # ── NWP-LEAD-17: measurement only. NO scoring code is touched by this
+    # change. Precision alone hides where the engine loses commercial value:
+    # a top-10 of 7 good_fit looks fine while qualified leads rot in Cold.
+    def recall_at(n, positive_set=POSITIVE):
+        """Of every <positive_set> record in the fixture, how many reach top-n."""
+        total = sum(1 for *_, lbl, _ in ranked if lbl.get("label") in positive_set)
+        if total == 0:
+            return 0.0, 0, 0
+        hit = sum(1 for *_, lbl, _ in ranked[:n] if lbl.get("label") in positive_set)
+        return hit / total, hit, total
+
+    good_fit_ranks = [i + 1 for i, (_, _, _, lbl, _) in enumerate(ranked)
+                      if lbl.get("label") == "good_fit"]
+    # A good_fit is "discarded" when the pipeline's own tier has dropped below
+    # Warm — i.e. it is not even in the list a human would work from.
+    below_warm = [(sc, k, entry.get("name", ""))
+                  for sc, k, entry, lbl, scobj in ranked
+                  if lbl.get("label") == "good_fit"
+                  and (scobj.get("tier") or "Cold") not in ("Hot", "Warm")]
+    # Unscored good_fit: demoted by the eligibility/directory gate to score 0.
+    unscored_good = [(k, entry.get("name", ""))
+                     for _, k, entry, lbl, scobj in ranked
+                     if lbl.get("label") == "good_fit"
+                     and not (scobj.get("breakdown") or {})]
+
+    rec10, rec_hit, rec_tot = recall_at(args.top)
+
     print(f"Fixture: {len(fix)} prospects, {len(labels)} labels, {missing} missing labels")
     print(f"precision@5  = {precision_at(5):.2f}  ({sum(1 for *_ , lbl, _ in top5 if lbl.get('label') in POSITIVE)}/5)")
     print(f"precision@{args.top} = {precision_at(args.top):.2f}  ({sum(1 for *_ , lbl, _ in top10 if lbl.get('label') in POSITIVE)}/{args.top})")
+    print(f"recall@{args.top}   = {rec10:.2f}  ({rec_hit}/{rec_tot} good_fit records reached the top {args.top})")
+    print(f"good_fit below Warm: {len(below_warm)}  "
+          f"{[(n, s) for s, _, n in below_warm]}")
+    if unscored_good:
+        print(f"good_fit demoted by a gate (score 0, no breakdown): {len(unscored_good)}  "
+              f"{[n for _, n in unscored_good]}")
     print(f"top-{args.top} false positives: {len(fp_top10)}  {fp_top10}")
     print(f"unverified (label=unknown): {len(unverified)}  {unverified}")
 
@@ -144,8 +180,14 @@ def main():
         total = sum(row.values())
         print(f"{t:10}" + "".join(f"{row[l]:>12}" for l in labels_order) + f"    {total}")
 
-    # Where do the good_fit records sit? Are they actually on top?
-    print("\ngood_fit rank positions:", [i + 1 for i, (_, k, _, lbl, _) in enumerate(ranked) if lbl.get("label") == "good_fit"])
+    # NWP-LEAD-17: good_fit rank distribution as a first-class metric — a
+    # qualified lead at rank 32 is invisible to anyone working the top 10.
+    print("\ngood_fit rank positions:", good_fit_ranks)
+    if good_fit_ranks:
+        import statistics
+        print(f"good_fit rank: median {statistics.median(good_fit_ranks):.0f}, "
+              f"worst {max(good_fit_ranks)}, in top-10 {sum(1 for r in good_fit_ranks if r <= 10)}/"
+              f"{len(good_fit_ranks)}")
 
     if args.verbose:
         print("\nRanked (top 20):")

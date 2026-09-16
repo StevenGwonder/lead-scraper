@@ -38,6 +38,56 @@ python3 benchmark/evaluate.py --top 10 --verbose
   listings and SEO pages as "admin/ops businesses"
 - 8 records are `unknown` (down/blocked + no contact) — correctly quarantined by T9
 
+## Pre-rework baseline (2026-09-12, NWP-LEAD-17 measurement added)
+
+Recorded **before** the NWP-LEAD-18 scoring rework, so it can be compared after.
+Measurement only — no scoring code changed. `evaluate.py` now reports recall, the
+`good_fit below Warm` count, and the good_fit rank distribution.
+
+| Metric | Value |
+|---|---|
+| precision@5 | **0.80** (4/5) |
+| precision@10 | **0.70** (7/10) |
+| recall@10 | **0.54** (7/13 good_fit reached the top 10) |
+| top-10 false positives | **0** |
+| good_fit below Warm | **5** |
+| good_fit demoted by a gate (score 0) | **1** |
+| good_fit rank positions | 1, 2, 4, 5, 7, 8, 10, 12, 13, 14, 15, 16, 32 (median 10, worst 32) |
+| named_pain firing count | **0** |
+| own-site hiring count | **11** (live cache) |
+| unverified (label=unknown) | 8 |
+
+Tier × label confusion:
+
+| Pipeline tier | good_fit | possible_fit | bad_fit | unknown | total |
+|---|---|---|---|---|---|
+| Hot | 0 | 0 | 0 | 0 | **0** |
+| Warm | 8 | 4 | 0 | 0 | 12 |
+| Cold | 5 | 17 | 11 | 8 | 41 |
+| Unverified | 0 | 0 | 0 | 0 | 0 |
+
+### What this baseline says
+
+- **Precision flatters the engine; recall exposes it.** A top-10 of 7 good_fit
+  looks healthy while **5 of 13** `good_fit` businesses sit in Cold and one is at
+  rank 32. The engine discards more than a third of its qualified leads and no
+  precision figure reported it.
+- **Four of the five below-Warm records are real businesses with keyword-stuffed
+  page-title names** — `Jobs Temecula` (jobstemecula.com, real recruiting firm),
+  `Murrieta Property Management, Murrieta Property Managers Property Management
+  Companies.` (homeriver.com), `Bankruptcy Attorney` (pickfordlaw.com),
+  `Full Service Accounting Firm` (swensonadvisors.com). All four score exactly 39
+  with `digital_footing: 0`.
+- **One is a false rejection.** `Full Service Accounting Firm`
+  (swensonadvisors.com — a real firm) is scored 0 because
+  `GENERIC_MODIFIER_PATTERNS` treats the leading `full[- ]service` as a generic
+  SEO modifier. The domain is clean; only the page-title name condemns it. This
+  pattern **predates NWP-LEAD-17** (present before this task). Fixing it is a
+  scoring change and therefore belongs to a separate issue, not this measurement.
+- **Score ceiling is 39 for these lanes** — `repetitive_work` 25 + `growth_budget`
+  14 + `digital_footing` 0. The `named_pain` pillar is still 0 and the
+  `digital_footing` collapse is unexplained; both belong to NWP-LEAD-16/18.
+
 ## Post NWP-LEAD (2026-08-04, all six tasks shipped)
 
 - **precision@5 = 0.60**, **precision@10 = 0.60**, **top-10 false positives = 0**
